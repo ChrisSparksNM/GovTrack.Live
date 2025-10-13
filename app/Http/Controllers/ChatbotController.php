@@ -54,11 +54,12 @@ class ChatbotController extends Controller
             $context = array_slice($context, -5);
             session()->put("chatbot_context_{$conversationId}", $context);
 
-            // Always format the response for better readability
+            // Get the raw response and clean it
             $rawResponse = $response['response_html'] ?? $response['response'];
+            $cleanResponse = $this->cleanResponse($rawResponse);
             
-            // Format the response with proper HTML structure
-            $formattedResponse = $this->formatPlainTextResponse($rawResponse);
+            // Format for better readability but keep it simple for typewriter effect
+            $formattedResponse = $this->formatSimpleResponse($cleanResponse);
             
             // Add bill links to the formatted response
             $linkedResponse = $this->addBillLinks($formattedResponse);
@@ -363,252 +364,112 @@ class ChatbotController extends Controller
     }
 
     /**
-     * Format plain text response into proper HTML with paragraphs and structure
+     * Format response with simple, readable structure that works with typewriter effect
      */
-    private function formatPlainTextResponse(string $response): string
+    private function formatSimpleResponse(string $response): string
     {
-        // Clean the response first
-        $cleanResponse = $this->cleanResponse($response);
+        // Normalize line breaks
+        $text = preg_replace('/\r\n|\r/', "\n", $response);
         
-        // Handle different formatting patterns
-        $formattedResponse = $this->processAdvancedFormatting($cleanResponse);
+        // Split into paragraphs on double line breaks
+        $paragraphs = preg_split('/\n\s*\n+/', $text);
+        $formattedParagraphs = [];
         
-        return $formattedResponse;
-    }
-
-    /**
-     * Process advanced formatting for better readability
-     */
-    private function processAdvancedFormatting(string $text): string
-    {
-        // First, normalize line breaks
-        $text = preg_replace('/\r\n|\r/', "\n", $text);
-        
-        // Split into sections based on various patterns
-        $sections = $this->splitIntoSections($text);
-        $formattedSections = [];
-        
-        foreach ($sections as $section) {
-            $section = trim($section);
-            if (empty($section)) continue;
+        foreach ($paragraphs as $paragraph) {
+            $paragraph = trim($paragraph);
+            if (empty($paragraph)) continue;
             
-            $formattedSection = $this->formatSection($section);
-            if (!empty($formattedSection)) {
-                $formattedSections[] = $formattedSection;
+            // Format this paragraph
+            $formatted = $this->formatParagraph($paragraph);
+            if (!empty($formatted)) {
+                $formattedParagraphs[] = $formatted;
             }
         }
         
-        return implode("\n\n", $formattedSections);
+        return implode("\n\n", $formattedParagraphs);
     }
 
     /**
-     * Split text into logical sections
+     * Format a single paragraph with basic structure
      */
-    private function splitIntoSections(string $text): array
+    private function formatParagraph(string $paragraph): string
     {
-        // Split on double line breaks, headers, or major formatting changes
-        $sections = preg_split('/\n\s*\n+/', $text);
-        
-        // Further split sections that contain multiple concepts
-        $refinedSections = [];
-        foreach ($sections as $section) {
-            // Split on sentences that end with periods followed by capital letters (new topics)
-            $subSections = preg_split('/(?<=\.)\s+(?=[A-Z][^.]*:)|(?<=\.)\s+(?=\d+\.)|(?<=\.)\s+(?=[-*•])/m', $section);
-            $refinedSections = array_merge($refinedSections, $subSections);
+        // Check if it's a header (ends with colon and has content after)
+        if (preg_match('/^(.+):\s*(.*)$/m', $paragraph, $matches) && !empty(trim($matches[2]))) {
+            $header = trim($matches[1]);
+            $content = trim($matches[2]);
+            return "**{$header}:**\n{$content}";
         }
         
-        return $refinedSections;
+        // Check if it contains bullet points
+        if (preg_match('/^[-*•]\s+/m', $paragraph)) {
+            return $this->formatBulletList($paragraph);
+        }
+        
+        // Check if it contains numbered list
+        if (preg_match('/^\d+\.\s+/m', $paragraph)) {
+            return $this->formatNumberedList($paragraph);
+        }
+        
+        // Regular paragraph - just clean it up
+        return $this->formatInlineElements($paragraph);
     }
 
     /**
-     * Format individual sections with appropriate HTML structure
+     * Format bullet lists simply
      */
-    private function formatSection(string $section): string
+    private function formatBulletList(string $text): string
     {
-        $section = trim($section);
-        if (empty($section)) return '';
-        
-        // Check for headers (lines ending with colons or starting with numbers/bullets)
-        if (preg_match('/^(.+):(?:\s*$|\s+(?=[A-Z]))/m', $section, $matches)) {
-            return $this->formatHeaderSection($section);
-        }
-        
-        // Check for numbered lists
-        if (preg_match('/^\d+\.\s+/', $section)) {
-            return $this->formatNumberedList($section);
-        }
-        
-        // Check for bullet lists
-        if (preg_match('/^[-*•]\s+/', $section)) {
-            return $this->formatBulletList($section);
-        }
-        
-        // Check for key-value pairs or statistics
-        if (preg_match('/^[^:]+:\s*[^:]+$/m', $section) && substr_count($section, ':') > 1) {
-            return $this->formatKeyValueSection($section);
-        }
-        
-        // Regular paragraph
-        return $this->formatParagraph($section);
-    }
-
-    /**
-     * Format sections with headers
-     */
-    private function formatHeaderSection(string $section): string
-    {
-        $lines = explode("\n", $section);
+        $lines = explode("\n", $text);
         $formatted = [];
         
         foreach ($lines as $line) {
             $line = trim($line);
             if (empty($line)) continue;
             
-            // Check if it's a header (ends with colon)
-            if (preg_match('/^(.+):(?:\s*$|\s+(.+))/', $line, $matches)) {
-                $header = trim($matches[1]);
-                $content = isset($matches[2]) ? trim($matches[2]) : '';
-                
-                $formatted[] = '<h3 class="text-lg font-semibold text-gray-900 mt-4 mb-2">' . $this->formatInlineElements($header) . '</h3>';
-                if (!empty($content)) {
-                    $formatted[] = '<p class="mb-3 leading-relaxed text-gray-700">' . $this->formatInlineElements($content) . '</p>';
-                }
+            // If it's a bullet point, format it
+            if (preg_match('/^[-*•]\s+(.+)$/', $line, $matches)) {
+                $formatted[] = "• " . trim($matches[1]);
             } else {
-                $formatted[] = '<p class="mb-3 leading-relaxed text-gray-700">' . $this->formatInlineElements($line) . '</p>';
+                $formatted[] = $line;
             }
         }
         
-        return '<div class="mb-4">' . implode("\n", $formatted) . '</div>';
+        return implode("\n", $formatted);
     }
 
     /**
-     * Format numbered lists
+     * Format numbered lists simply
      */
-    private function formatNumberedList(string $section): string
+    private function formatNumberedList(string $text): string
     {
-        $items = preg_split('/(?=\d+\.\s+)/', $section);
-        $listItems = [];
-        
-        foreach ($items as $item) {
-            $item = trim($item);
-            if (empty($item)) continue;
-            
-            $item = preg_replace('/^\d+\.\s+/', '', $item);
-            if (!empty($item)) {
-                $listItems[] = '<li class="mb-2 leading-relaxed">' . $this->formatInlineElements($item) . '</li>';
-            }
-        }
-        
-        if (!empty($listItems)) {
-            return '<ol class="list-decimal list-inside mb-4 space-y-1 ml-4">' . implode("\n", $listItems) . '</ol>';
-        }
-        
-        return '';
-    }
-
-    /**
-     * Format bullet lists
-     */
-    private function formatBulletList(string $section): string
-    {
-        $items = preg_split('/(?=[-*•]\s+)/', $section);
-        $listItems = [];
-        
-        foreach ($items as $item) {
-            $item = trim($item);
-            if (empty($item)) continue;
-            
-            $item = preg_replace('/^[-*•]\s+/', '', $item);
-            if (!empty($item)) {
-                $listItems[] = '<li class="mb-2 leading-relaxed">' . $this->formatInlineElements($item) . '</li>';
-            }
-        }
-        
-        if (!empty($listItems)) {
-            return '<ul class="list-disc list-inside mb-4 space-y-1 ml-4">' . implode("\n", $listItems) . '</ul>';
-        }
-        
-        return '';
-    }
-
-    /**
-     * Format key-value sections (statistics, data points)
-     */
-    private function formatKeyValueSection(string $section): string
-    {
-        $lines = explode("\n", $section);
+        $lines = explode("\n", $text);
         $formatted = [];
+        $counter = 1;
         
         foreach ($lines as $line) {
             $line = trim($line);
             if (empty($line)) continue;
             
-            if (strpos($line, ':') !== false) {
-                list($key, $value) = explode(':', $line, 2);
-                $key = trim($key);
-                $value = trim($value);
-                
-                $formatted[] = '<div class="flex justify-between items-start py-1 border-b border-gray-100">';
-                $formatted[] = '<span class="font-medium text-gray-900">' . $this->formatInlineElements($key) . ':</span>';
-                $formatted[] = '<span class="text-gray-700 ml-4">' . $this->formatInlineElements($value) . '</span>';
-                $formatted[] = '</div>';
+            // If it's a numbered item, format it
+            if (preg_match('/^\d+\.\s+(.+)$/', $line, $matches)) {
+                $formatted[] = "{$counter}. " . trim($matches[1]);
+                $counter++;
             } else {
-                $formatted[] = '<p class="mb-2 leading-relaxed text-gray-700">' . $this->formatInlineElements($line) . '</p>';
+                $formatted[] = $line;
             }
         }
         
-        return '<div class="mb-4 bg-gray-50 p-3 rounded-lg">' . implode("\n", $formatted) . '</div>';
+        return implode("\n", $formatted);
     }
 
     /**
-     * Format regular paragraphs
-     */
-    private function formatParagraph(string $section): string
-    {
-        $lines = explode("\n", $section);
-        $formattedLines = [];
-        
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (!empty($line)) {
-                $formattedLines[] = $this->formatInlineElements($line);
-            }
-        }
-        
-        if (!empty($formattedLines)) {
-            // If it's a single line, make it a paragraph. If multiple lines, join with breaks
-            if (count($formattedLines) === 1) {
-                return '<p class="mb-4 leading-relaxed text-gray-700">' . $formattedLines[0] . '</p>';
-            } else {
-                return '<div class="mb-4 leading-relaxed text-gray-700">' . implode('<br>', $formattedLines) . '</div>';
-            }
-        }
-        
-        return '';
-    }
-
-    /**
-     * Format inline elements like bold, italic, etc.
+     * Format inline elements like bold, italic, etc. - keep simple for typewriter effect
      */
     private function formatInlineElements(string $text): string
     {
-        // Convert bold text (both ** and __ formats)
-        $text = preg_replace('/\*\*(.*?)\*\*/', '<strong class="font-semibold text-gray-900">$1</strong>', $text);
-        $text = preg_replace('/__(.*?)__/', '<strong class="font-semibold text-gray-900">$1</strong>', $text);
-        
-        // Convert italic text
-        $text = preg_replace('/\*(.*?)\*/', '<em class="italic text-gray-800">$1</em>', $text);
-        $text = preg_replace('/_(.*?)_/', '<em class="italic text-gray-800">$1</em>', $text);
-        
-        // Convert inline code
-        $text = preg_replace('/`([^`]+)`/', '<code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono">$1</code>', $text);
-        
-        // Highlight numbers and percentages
-        $text = preg_replace('/\b(\d+(?:,\d{3})*(?:\.\d+)?%?)\b/', '<span class="font-medium text-blue-700">$1</span>', $text);
-        
-        // Highlight bill references that aren't already linked
-        $text = preg_replace('/\b([HS]\.?R?\.?\s*\d+)\b(?![^<]*<\/a>)/', '<span class="font-medium text-indigo-700">$1</span>', $text);
-        
+        // Just return the text as-is for now to avoid HTML complexity with typewriter
+        // The typewriter effect will handle the display, and we'll add formatting after
         return $text;
     }
 }

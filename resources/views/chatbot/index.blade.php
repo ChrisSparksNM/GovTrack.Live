@@ -542,42 +542,80 @@ document.addEventListener('DOMContentLoaded', function() {
         scrollToBottom();
     }
 
-    function typewriterEffect(element, content, speed = 15) {
-        // Check if content contains HTML tags
-        const hasHtml = /<[^>]*>/.test(content);
+    function typewriterEffect(element, content, speed = 20) {
+        // Always use typewriter effect, then format after completion
+        const words = content.split(' ');
+        let currentWordIndex = 0;
+        element.innerHTML = '';
         
-        if (hasHtml) {
-            // For HTML content, display it immediately with proper formatting
-            element.innerHTML = content;
-            scrollToBottom();
-        } else {
-            // For plain text, use typewriter effect
-            const words = content.split(' ');
-            let currentWordIndex = 0;
-            element.innerHTML = '';
-            
-            function typeNextWord() {
-                if (currentWordIndex < words.length) {
-                    // Add the next word
-                    const wordsToShow = words.slice(0, currentWordIndex + 1);
-                    element.innerHTML = escapeHtml(wordsToShow.join(' '));
-                    
-                    currentWordIndex++;
-                    setTimeout(typeNextWord, speed);
-                    
-                    // Auto-scroll during typing every few words
-                    if (currentWordIndex % 8 === 0) {
-                        scrollToBottom();
-                    }
-                } else {
-                    // Ensure final content is displayed correctly
-                    element.innerHTML = hasHtml ? content : escapeHtml(content);
+        function typeNextWord() {
+            if (currentWordIndex < words.length) {
+                // Add the next word
+                const wordsToShow = words.slice(0, currentWordIndex + 1);
+                element.textContent = wordsToShow.join(' ');
+                
+                currentWordIndex++;
+                setTimeout(typeNextWord, speed);
+                
+                // Auto-scroll during typing every few words
+                if (currentWordIndex % 10 === 0) {
                     scrollToBottom();
                 }
+            } else {
+                // Typing complete - now apply formatting
+                formatCompletedText(element, content);
+                scrollToBottom();
+            }
+        }
+        
+        typeNextWord();
+    }
+
+    function formatCompletedText(element, content) {
+        // Apply formatting after typewriter effect is complete
+        let formatted = content;
+        
+        // Format paragraphs (double line breaks)
+        formatted = formatted.replace(/\n\n+/g, '</p><p class="mb-4 leading-relaxed">');
+        
+        // Format headers (text ending with colon)
+        formatted = formatted.replace(/^(.+):$/gm, '<h3 class="text-lg font-semibold text-gray-900 mt-4 mb-2">$1</h3>');
+        
+        // Format bold text
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>');
+        
+        // Format bullet points
+        formatted = formatted.replace(/^• (.+)$/gm, '<li class="mb-1 ml-4">$1</li>');
+        
+        // Format numbered lists
+        formatted = formatted.replace(/^(\d+)\. (.+)$/gm, '<li class="mb-1 ml-4" style="list-style-type: decimal;">$2</li>');
+        
+        // Wrap in paragraph tags if not already formatted
+        if (!formatted.includes('<p>') && !formatted.includes('<h3>') && !formatted.includes('<li>')) {
+            formatted = '<p class="mb-4 leading-relaxed">' + formatted + '</p>';
+        } else {
+            // Wrap the content properly
+            if (formatted.includes('<li>')) {
+                // Handle lists
+                formatted = formatted.replace(/(<li.*?>.*?<\/li>)/gs, function(match) {
+                    if (match.includes('list-style-type: decimal')) {
+                        return '<ol class="list-decimal list-inside mb-4 ml-4">' + match.replace(/style="list-style-type: decimal;"/g, '') + '</ol>';
+                    } else {
+                        return '<ul class="list-disc list-inside mb-4 ml-4">' + match + '</ul>';
+                    }
+                });
             }
             
-            typeNextWord();
+            // Wrap remaining text in paragraphs
+            if (!formatted.startsWith('<')) {
+                formatted = '<p class="mb-4 leading-relaxed">' + formatted;
+            }
+            if (!formatted.endsWith('>')) {
+                formatted = formatted + '</p>';
+            }
         }
+        
+        element.innerHTML = formatted;
     }
 
     function showTypingIndicator() {
