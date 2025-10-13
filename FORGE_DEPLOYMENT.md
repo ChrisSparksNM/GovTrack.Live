@@ -19,7 +19,11 @@ DB_PASSWORD="ohLGpOVbBef0e4cuhzgt"
 In your Laravel Forge dashboard:
 - Go to your site → Environment
 - Update the database configuration with the MySQL credentials above
-- Make sure `CONGRESS_API_KEY` and `ANTHROPIC_API_KEY` are set
+- **REQUIRED API Keys:**
+  - `CONGRESS_API_KEY` - For scraping bills and members
+  - `VOYAGE_API_KEY` - For generating embeddings (semantic search)
+- **Optional API Keys:**
+  - `ANTHROPIC_API_KEY` - For enhanced chatbot features
 
 ### 2. Deploy and Run Migrations
 The migrations now have safety checks to prevent "table already exists" errors:
@@ -83,8 +87,18 @@ Set up these commands to run regularly:
 
 ## Troubleshooting
 
-If you encounter issues:
+### API Key Issues
+If embeddings fail or scrapers don't work:
+1. **Check API keys:** `php check-api-keys.php`
+2. **Test embeddings:** `php artisan test:embeddings`
+3. **Check specific config:** `php artisan config:show services.voyage.api_key`
+
+### Database Issues
 1. Check database connection: `php artisan tinker` then `DB::connection()->getPdo()`
-2. Check API keys: `php artisan config:show services.congress.api_key`
-3. Run migration status: `php artisan migrate:status`
-4. Check logs: `tail -f storage/logs/laravel.log`
+2. Run migration status: `php artisan migrate:status`
+3. Check logs: `tail -f storage/logs/laravel.log`
+
+### Common Fixes
+- **Embeddings failing:** Set `VOYAGE_API_KEY` in Forge Environment
+- **Scraper failing:** Set `CONGRESS_API_KEY` in Forge Environment
+- **Duplicate errors:** Run `php fix-duplicates.php`
