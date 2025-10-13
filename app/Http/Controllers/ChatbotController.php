@@ -371,7 +371,25 @@ class ChatbotController extends Controller
         // Normalize line breaks
         $text = preg_replace('/\r\n|\r/', "\n", $response);
         
-        // Split into paragraphs on double line breaks
+        // Look for common section headers and add proper breaks
+        $patterns = [
+            // Headers that end with colon
+            '/([.!?])\s+([A-Z][A-Za-z\s]+:)/' => '$1' . "\n\n" . '$2',
+            // Common section starters
+            '/([.!?])\s+(Recently\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Data\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Recommendation\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Notable\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Based\s+on\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Here\s+are\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(The\s+semantic\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+        ];
+        
+        foreach ($patterns as $pattern => $replacement) {
+            $text = preg_replace($pattern, $replacement, $text);
+        }
+        
+        // Split into paragraphs on double line breaks (now that we've added them)
         $paragraphs = preg_split('/\n\s*\n+/', $text);
         $formattedParagraphs = [];
         
@@ -394,13 +412,6 @@ class ChatbotController extends Controller
      */
     private function formatParagraph(string $paragraph): string
     {
-        // Check if it's a header (ends with colon and has content after)
-        if (preg_match('/^(.+):\s*(.*)$/m', $paragraph, $matches) && !empty(trim($matches[2]))) {
-            $header = trim($matches[1]);
-            $content = trim($matches[2]);
-            return "**{$header}:**\n{$content}";
-        }
-        
         // Check if it contains bullet points
         if (preg_match('/^[-*•]\s+/m', $paragraph)) {
             return $this->formatBulletList($paragraph);
@@ -411,7 +422,7 @@ class ChatbotController extends Controller
             return $this->formatNumberedList($paragraph);
         }
         
-        // Regular paragraph - just clean it up
+        // Regular paragraph - just clean it up and apply inline formatting
         return $this->formatInlineElements($paragraph);
     }
 

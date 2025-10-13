@@ -609,6 +609,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function formatCompletedText(element, content) {
+        console.log('Original content:', content); // Debug log
+        
         // Check if content already has HTML (like bill links from backend)
         const hasHtml = /<[^>]*>/.test(content);
         
@@ -631,22 +633,43 @@ document.addEventListener('DOMContentLoaded', function() {
         // Apply formatting for plain text content
         let formatted = content;
         
-        // Split into paragraphs first
-        const paragraphs = formatted.split(/\n\s*\n/);
+        // More aggressive paragraph splitting - try multiple patterns
+        let paragraphs = [];
+        
+        // First try double line breaks
+        if (formatted.includes('\n\n')) {
+            paragraphs = formatted.split(/\n\s*\n/);
+        } 
+        // If no double line breaks, try to split on sentences that look like headers
+        else if (formatted.match(/[.!?]\s+[A-Z][^.]*:/)) {
+            paragraphs = formatted.split(/(?<=[.!?])\s+(?=[A-Z][^.]*:)/);
+        }
+        // If still no good splits, try splitting on capital letters after periods
+        else if (formatted.match(/[.!?]\s+[A-Z]/)) {
+            paragraphs = formatted.split(/(?<=[.!?])\s+(?=[A-Z])/);
+        }
+        // Last resort - just use the whole thing as one paragraph but look for headers
+        else {
+            paragraphs = [formatted];
+        }
+        
+        console.log('Split into paragraphs:', paragraphs); // Debug log
+        
         const formattedParagraphs = [];
         
-        paragraphs.forEach(paragraph => {
+        paragraphs.forEach((paragraph, index) => {
             paragraph = paragraph.trim();
             if (!paragraph) return;
             
-            // Check if it's a header (ends with colon)
-            if (paragraph.match(/^.+:$/m)) {
+            // Check if it's a header (ends with colon or looks like a title)
+            if (paragraph.match(/^.+:$/m) || paragraph.match(/^[A-Z][^.]*[A-Z][^.]*$/)) {
                 const lines = paragraph.split('\n');
                 const processedLines = lines.map(line => {
-                    if (line.trim().endsWith(':')) {
-                        return `<h3 class="text-lg font-semibold text-gray-900 mt-4 mb-2">${line.trim()}</h3>`;
+                    line = line.trim();
+                    if (line.endsWith(':') || (line.match(/^[A-Z]/) && !line.includes('.'))) {
+                        return `<h3 class="text-lg font-semibold text-gray-900 mt-6 mb-3">${formatInlineText(line)}</h3>`;
                     }
-                    return `<p class="mb-2 leading-relaxed">${formatInlineText(line)}</p>`;
+                    return `<p class="mb-3 leading-relaxed">${formatInlineText(line)}</p>`;
                 });
                 formattedParagraphs.push(processedLines.join('\n'));
                 return;
@@ -658,11 +681,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const listItems = items.map(item => {
                     if (item.match(/^[-•*]\s+/)) {
                         const text = item.replace(/^[-•*]\s+/, '');
-                        return `<li class="mb-1">${formatInlineText(text)}</li>`;
+                        return `<li class="mb-2">${formatInlineText(text)}</li>`;
                     }
                     return `<p class="mb-2 leading-relaxed">${formatInlineText(item)}</p>`;
                 });
-                formattedParagraphs.push(`<ul class="list-disc list-inside mb-4 ml-4">${listItems.join('')}</ul>`);
+                formattedParagraphs.push(`<ul class="list-disc list-inside mb-6 ml-4">${listItems.join('')}</ul>`);
                 return;
             }
             
@@ -672,18 +695,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 const listItems = items.map(item => {
                     if (item.match(/^\d+\.\s+/)) {
                         const text = item.replace(/^\d+\.\s+/, '');
-                        return `<li class="mb-1">${formatInlineText(text)}</li>`;
+                        return `<li class="mb-2">${formatInlineText(text)}</li>`;
                     }
                     return `<p class="mb-2 leading-relaxed">${formatInlineText(item)}</p>`;
                 });
-                formattedParagraphs.push(`<ol class="list-decimal list-inside mb-4 ml-4">${listItems.join('')}</ol>`);
+                formattedParagraphs.push(`<ol class="list-decimal list-inside mb-6 ml-4">${listItems.join('')}</ol>`);
                 return;
             }
             
-            // Regular paragraph
-            formattedParagraphs.push(`<p class="mb-4 leading-relaxed">${formatInlineText(paragraph)}</p>`);
+            // Regular paragraph - but check for embedded headers
+            const lines = paragraph.split(/(?<=[.!?])\s+(?=[A-Z][A-Za-z\s]+:)/);
+            if (lines.length > 1) {
+                // Has embedded headers
+                lines.forEach(line => {
+                    line = line.trim();
+                    if (line.match(/^[A-Z][A-Za-z\s]+:$/)) {
+                        formattedParagraphs.push(`<h3 class="text-lg font-semibold text-gray-900 mt-6 mb-3">${formatInlineText(line)}</h3>`);
+                    } else if (line) {
+                        formattedParagraphs.push(`<p class="mb-4 leading-relaxed">${formatInlineText(line)}</p>`);
+                    }
+                });
+            } else {
+                // Regular paragraph
+                formattedParagraphs.push(`<p class="mb-4 leading-relaxed">${formatInlineText(paragraph)}</p>`);
+            }
         });
         
+        console.log('Final formatted paragraphs:', formattedParagraphs); // Debug log
         element.innerHTML = formattedParagraphs.join('\n');
     }
 
