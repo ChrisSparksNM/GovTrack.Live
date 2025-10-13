@@ -371,25 +371,59 @@ class ChatbotController extends Controller
         // Normalize line breaks
         $text = preg_replace('/\r\n|\r/', "\n", $response);
         
-        // Look for common section headers and add proper breaks
+        // More aggressive paragraph detection patterns
         $patterns = [
-            // Headers that end with colon
-            '/([.!?])\s+([A-Z][A-Za-z\s]+:)/' => '$1' . "\n\n" . '$2',
+            // Headers that end with colon (with more context)
+            '/([.!?])\s+([A-Z][A-Za-z\s,&-]+:)/' => '$1' . "\n\n" . '$2',
             // Common section starters
-            '/([.!?])\s+(Recently\s+[A-Z])/' => '$1' . "\n\n" . '$2',
-            '/([.!?])\s+(Data\s+[A-Z])/' => '$1' . "\n\n" . '$2',
-            '/([.!?])\s+(Recommendation\s+[A-Z])/' => '$1' . "\n\n" . '$2',
-            '/([.!?])\s+(Notable\s+[A-Z])/' => '$1' . "\n\n" . '$2',
-            '/([.!?])\s+(Based\s+on\s+[A-Z])/' => '$1' . "\n\n" . '$2',
-            '/([.!?])\s+(Here\s+are\s+[A-Z])/' => '$1' . "\n\n" . '$2',
-            '/([.!?])\s+(The\s+semantic\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Recently[^.]*[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Data[^.]*[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Based\s+on[^.]*[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Here\s+are[^.]*[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(The\s+most[^.]*[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Notable[^.]*[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Key[^.]*[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Summary[^.]*[A-Z])/' => '$1' . "\n\n" . '$2',
+            // Break on numbered lists
+            '/([.!?])\s+(\d+\.\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            // Break on bullet points
+            '/([.!?])\s+([-•*]\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            // Break on "However," "Additionally," etc.
+            '/([.!?])\s+(However,\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Additionally,\s+[A-Z])/' => '$1' . "\n\n" . '$2',
+            '/([.!?])\s+(Furthermore,\s+[A-Z])/' => '$1' . "\n\n" . '$2',
         ];
         
         foreach ($patterns as $pattern => $replacement) {
             $text = preg_replace($pattern, $replacement, $text);
         }
         
-        // Split into paragraphs on double line breaks (now that we've added them)
+        // Also try to break on very long sentences (over 200 chars)
+        $sentences = preg_split('/(?<=[.!?])\s+/', $text);
+        $rebuiltText = [];
+        $currentParagraph = '';
+        
+        foreach ($sentences as $sentence) {
+            $sentence = trim($sentence);
+            if (empty($sentence)) continue;
+            
+            // If current paragraph is getting too long, start a new one
+            if (strlen($currentParagraph) > 200 && !empty($currentParagraph)) {
+                $rebuiltText[] = $currentParagraph;
+                $currentParagraph = $sentence;
+            } else {
+                $currentParagraph .= (empty($currentParagraph) ? '' : ' ') . $sentence;
+            }
+        }
+        
+        if (!empty($currentParagraph)) {
+            $rebuiltText[] = $currentParagraph;
+        }
+        
+        // Join with double line breaks for proper paragraph separation
+        $text = implode("\n\n", $rebuiltText);
+        
+        // Split into paragraphs on double line breaks
         $paragraphs = preg_split('/\n\s*\n+/', $text);
         $formattedParagraphs = [];
         

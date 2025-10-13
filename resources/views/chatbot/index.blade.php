@@ -644,9 +644,25 @@ document.addEventListener('DOMContentLoaded', function() {
         else if (formatted.match(/[.!?]\s+[A-Z][^.]*:/)) {
             paragraphs = formatted.split(/(?<=[.!?])\s+(?=[A-Z][^.]*:)/);
         }
-        // If still no good splits, try splitting on capital letters after periods
-        else if (formatted.match(/[.!?]\s+[A-Z]/)) {
-            paragraphs = formatted.split(/(?<=[.!?])\s+(?=[A-Z])/);
+        // Try splitting on numbered lists
+        else if (formatted.match(/[.!?]\s+\d+\./)) {
+            paragraphs = formatted.split(/(?<=[.!?])\s+(?=\d+\.)/);
+        }
+        // Try splitting on bullet points
+        else if (formatted.match(/[.!?]\s+[-•*]/)) {
+            paragraphs = formatted.split(/(?<=[.!?])\s+(?=[-•*])/);
+        }
+        // Try splitting on transition words
+        else if (formatted.match(/[.!?]\s+(However|Additionally|Furthermore|Based on|Here are|The most|Notable|Key|Summary)/)) {
+            paragraphs = formatted.split(/(?<=[.!?])\s+(?=(However|Additionally|Furthermore|Based on|Here are|The most|Notable|Key|Summary))/);
+        }
+        // If still no good splits, try splitting every 3-4 sentences
+        else if (formatted.match(/[.!?]/g) && formatted.match(/[.!?]/g).length > 3) {
+            const sentences = formatted.split(/(?<=[.!?])\s+/);
+            paragraphs = [];
+            for (let i = 0; i < sentences.length; i += 3) {
+                paragraphs.push(sentences.slice(i, i + 3).join(' '));
+            }
         }
         // Last resort - just use the whole thing as one paragraph but look for headers
         else {
