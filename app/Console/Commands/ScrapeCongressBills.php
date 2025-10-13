@@ -391,7 +391,7 @@ class ScrapeCongressBills extends Command
             // Store legislative subjects
             if (!empty($subjects['legislative_subjects'])) {
                 foreach ($subjects['legislative_subjects'] as $subject) {
-                    BillSubject::create([
+                    BillSubject::updateOrCreate([
                         'bill_id' => $bill->id,
                         'name' => $subject['name'],
                         'type' => 'legislative',
@@ -401,7 +401,7 @@ class ScrapeCongressBills extends Command
 
             // Store policy area
             if (!empty($subjects['policy_area'])) {
-                BillSubject::create([
+                BillSubject::updateOrCreate([
                     'bill_id' => $bill->id,
                     'name' => $subjects['policy_area'],
                     'type' => 'policy_area',
@@ -422,9 +422,10 @@ class ScrapeCongressBills extends Command
             $bill->cosponsors()->delete();
 
             foreach ($cosponsors as $cosponsorData) {
-                BillCosponsor::create([
+                BillCosponsor::updateOrCreate([
                     'bill_id' => $bill->id,
                     'bioguide_id' => $cosponsorData['bioguide_id'] ?? null,
+                ], [
                     'first_name' => $cosponsorData['first_name'] ?? null,
                     'last_name' => $cosponsorData['last_name'] ?? null,
                     'full_name' => $cosponsorData['full_name'] ?? null,
@@ -470,10 +471,11 @@ class ScrapeCongressBills extends Command
                     }
                 }
 
-                $textVersion = BillTextVersion::create([
+                $textVersion = BillTextVersion::updateOrCreate([
                     'bill_id' => $bill->id,
                     'date' => \Carbon\Carbon::parse($versionData['date']),
                     'type' => $versionData['type'],
+                ], [
                     'formatted_text_url' => $formattedTextUrl,
                     'pdf_url' => $pdfUrl,
                     'xml_url' => $xmlUrl,

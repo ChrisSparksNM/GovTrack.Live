@@ -514,10 +514,11 @@ class ScrapeCongressUpdates extends Command
                     }
 
                     if (!$this->dryRun) {
-                        $textVersion = BillTextVersion::create([
+                        $textVersion = BillTextVersion::updateOrCreate([
                             'bill_id' => $bill->id,
                             'date' => Carbon::parse($versionData['date']),
                             'type' => $versionData['type'],
+                        ], [
                             'formatted_text_url' => $formattedTextUrl,
                             'pdf_url' => $pdfUrl,
                             'xml_url' => $xmlUrl,
