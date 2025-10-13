@@ -91,3 +91,14 @@ Route::get('/debug-chatbot', function() {
         ], 500);
     }
 });
+
+
+// Simple test route
+Route::get('/test-simple', function() {
+    return response()->json([
+        'status' => 'working',
+        'memory' => ini_get('memory_limit'),
+        'time' => date('Y-m-d H:i:s'),
+        'php_version' => PHP_VERSION
+    ]);
+});
