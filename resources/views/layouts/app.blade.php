@@ -95,7 +95,7 @@
                                     </div>
                                     <div class="flex flex-col">
                                         <a href="{{ route('bills.index') }}" class="text-2xl font-bold text-white tracking-wide" style="font-family: 'Playfair Display', serif;">
-                                            {{ config('app.name', 'CongressTracker') }}
+                                            GovTrack.Live
                                         </a>
                                         <span class="text-xs text-amber-300 font-medium tracking-widest uppercase">Legislative Oversight</span>
                                     </div>
