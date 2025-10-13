@@ -16,7 +16,7 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
         $trackedBills = $user->trackedBills()
-            ->orderBy('user_bills.created_at', 'desc')
+            ->orderBy('tracked_bills.created_at', 'desc')
             ->paginate(20);
 
         return view('dashboard', compact('trackedBills'));
