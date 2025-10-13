@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('bill_votes', function (Blueprint $table) {
+        if (!Schema::hasTable('bill_votes')) {
+            Schema::create('bill_votes', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('bill_id')->constrained()->onDelete('cascade');
@@ -20,7 +21,8 @@ return new class extends Migration
             
             // Ensure one vote per user per bill
             $table->unique(['user_id', 'bill_id']);
-        });
+            });
+        }
     }
 
     /**

@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('bill_text_versions', function (Blueprint $table) {
+        if (!Schema::hasTable('bill_text_versions')) {
+            Schema::create('bill_text_versions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('bill_id')->constrained()->onDelete('cascade');
             
@@ -36,7 +37,8 @@ return new class extends Migration
             
             // Prevent duplicate versions for the same bill
             $table->unique(['bill_id', 'type', 'date']);
-        });
+            });
+        }
     }
 
     public function down(): void

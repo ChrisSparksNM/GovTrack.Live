@@ -12,8 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('members', function (Blueprint $table) {
-            $table->string('chamber')->nullable()->after('district'); // 'house' or 'senate'
-            $table->index(['chamber']);
+            if (!Schema::hasColumn('members', 'chamber')) {
+                $table->string('chamber')->nullable()->after('district'); // 'house' or 'senate'
+                $table->index(['chamber']);
+            }
         });
     }
 

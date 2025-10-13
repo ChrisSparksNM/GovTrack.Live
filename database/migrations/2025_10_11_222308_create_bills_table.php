@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('bills', function (Blueprint $table) {
+        if (!Schema::hasTable('bills')) {
+            Schema::create('bills', function (Blueprint $table) {
             $table->id();
             
             // Basic bill identification
@@ -66,7 +67,8 @@ return new class extends Migration
             $table->index('latest_action_date');
             $table->index('is_fully_scraped');
             $table->index('policy_area');
-        });
+            });
+        }
     }
 
     public function down(): void

@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('tracked_bills', function (Blueprint $table) {
+        if (!Schema::hasTable('tracked_bills')) {
+            Schema::create('tracked_bills', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('bill_id')->constrained()->onDelete('cascade');
@@ -25,7 +26,8 @@ return new class extends Migration
             
             // Index for faster queries
             $table->index(['user_id', 'tracked_at']);
-        });
+            });
+        }
     }
 
     /**

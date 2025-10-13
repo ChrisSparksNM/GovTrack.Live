@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('bill_subjects', function (Blueprint $table) {
+        if (!Schema::hasTable('bill_subjects')) {
+            Schema::create('bill_subjects', function (Blueprint $table) {
             $table->id();
             $table->foreignId('bill_id')->constrained()->onDelete('cascade');
             
@@ -25,7 +26,8 @@ return new class extends Migration
             
             // Prevent duplicate subjects for the same bill
             $table->unique(['bill_id', 'name', 'type']);
-        });
+            });
+        }
     }
 
     public function down(): void

@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('embeddings', function (Blueprint $table) {
+        if (!Schema::hasTable('embeddings')) {
+            Schema::create('embeddings', function (Blueprint $table) {
             $table->id();
             $table->string('entity_type'); // 'bill', 'member', 'bill_action', etc.
             $table->unsignedBigInteger('entity_id');
@@ -19,7 +20,8 @@ return new class extends Migration
             
             $table->index(['entity_type', 'entity_id']);
             $table->index('entity_type');
-        });
+            });
+        }
     }
 
     public function down(): void

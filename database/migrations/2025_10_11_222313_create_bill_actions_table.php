@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('bill_actions', function (Blueprint $table) {
+        if (!Schema::hasTable('bill_actions')) {
+            Schema::create('bill_actions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('bill_id')->constrained()->onDelete('cascade');
             
@@ -33,7 +34,8 @@ return new class extends Migration
             $table->index('action_date');
             $table->index('type');
             $table->index('source_system');
-        });
+            });
+        }
     }
 
     public function down(): void

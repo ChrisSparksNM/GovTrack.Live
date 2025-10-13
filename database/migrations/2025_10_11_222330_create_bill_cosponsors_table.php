@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('bill_cosponsors', function (Blueprint $table) {
+        if (!Schema::hasTable('bill_cosponsors')) {
+            Schema::create('bill_cosponsors', function (Blueprint $table) {
             $table->id();
             $table->foreignId('bill_id')->constrained()->onDelete('cascade');
             
@@ -35,7 +36,8 @@ return new class extends Migration
             
             // Prevent duplicate cosponsors for the same bill
             $table->unique(['bill_id', 'bioguide_id']);
-        });
+            });
+        }
     }
 
     public function down(): void
