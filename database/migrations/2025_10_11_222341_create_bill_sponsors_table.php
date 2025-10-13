@@ -29,7 +29,8 @@ return new class extends Migration
             $table->index('bill_id');
             $table->index('bioguide_id');
             $table->index(['party', 'state']);
-        });
+            });
+        }
     }
 
     public function down(): void
