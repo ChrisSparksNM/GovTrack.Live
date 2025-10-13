@@ -390,7 +390,7 @@
                                 </div>
 
                                 <!-- Action Buttons -->
-                                <div class="flex justify-between items-center">
+                                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                                     <div class="flex items-center space-x-3">
                                         <div class="text-xs text-gray-500">
                                             @if($bill->last_scraped_at)
@@ -449,7 +449,7 @@
                                     </div>
                                     
                                     <a href="{{ route('bills.show', $bill->congress_id) }}" 
-                                       class="inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all transform hover:scale-105">
+                                       class="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all transform hover:scale-105 w-full sm:w-auto">
                                         View Details
                                         <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
