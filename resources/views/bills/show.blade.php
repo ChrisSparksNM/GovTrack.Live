@@ -199,8 +199,40 @@
         @if($bill->bill_text)
             <div class="mb-6">
                 <div class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-200 overflow-hidden">
-                    <div class="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-4">
-                        <div class="flex items-center justify-between">
+                    <div class="bg-gradient-to-r from-purple-600 to-blue-600 px-4 sm:px-6 py-4">
+                        <!-- Mobile Layout -->
+                        <div class="block sm:hidden">
+                            <div class="flex items-center mb-3">
+                                <svg class="h-5 w-5 text-white mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                </svg>
+                                <h3 class="text-lg font-bold text-white">AI Summary</h3>
+                            </div>
+                            @if($bill->ai_summary)
+                                <div class="mb-3">
+                                    <span class="px-2 py-1 bg-white/20 text-white text-xs rounded-full">
+                                        Generated {{ $bill->ai_summary_generated_at->diffForHumans() }}
+                                    </span>
+                                </div>
+                            @endif
+                            <button id="generate-summary-btn" 
+                                    onclick="generateAISummary('{{ $bill->congress_id }}')"
+                                    class="w-full px-3 py-2 bg-white text-purple-600 rounded-lg font-medium text-sm hover:bg-purple-50 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50">
+                                <span class="btn-text">
+                                    @if($bill->ai_summary)
+                                        Regenerate Summary
+                                    @else
+                                        Generate AI Summary
+                                    @endif
+                                </span>
+                                <svg class="loading-spinner hidden inline w-4 h-4 ml-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <!-- Desktop Layout -->
+                        <div class="hidden sm:flex items-center justify-between">
                             <div class="flex items-center">
                                 <svg class="h-6 w-6 text-white mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
@@ -213,9 +245,9 @@
                                         Generated {{ $bill->ai_summary_generated_at->diffForHumans() }}
                                     </span>
                                 @endif
-                                <button id="generate-summary-btn" 
+                                <button id="generate-summary-btn-desktop" 
                                         onclick="generateAISummary('{{ $bill->congress_id }}')"
-                                        class="px-4 py-2 bg-white text-purple-600 rounded-lg font-semibold text-sm hover:bg-purple-50 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50">
+                                        class="px-4 py-2 bg-white text-purple-600 rounded-lg font-semibold text-sm hover:bg-purple-50 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 whitespace-nowrap">
                                     <span class="btn-text">
                                         @if($bill->ai_summary)
                                             Regenerate Summary
@@ -576,19 +608,26 @@
                 
                 // AI Summary Generation
                 async function generateAISummary(congressId) {
-                    const button = document.getElementById('generate-summary-btn');
-                    const buttonText = button.querySelector('.btn-text');
-                    const spinner = button.querySelector('.loading-spinner');
+                    // Get both mobile and desktop buttons
+                    const mobileButton = document.getElementById('generate-summary-btn');
+                    const desktopButton = document.getElementById('generate-summary-btn-desktop');
                     const contentDiv = document.getElementById('ai-summary-content');
                     const errorDiv = document.getElementById('ai-summary-error');
                     
                     // Hide any previous errors
                     errorDiv.classList.add('hidden');
                     
-                    // Show loading state
-                    button.disabled = true;
-                    buttonText.textContent = 'Generating...';
-                    spinner.classList.remove('hidden');
+                    // Show loading state on both buttons
+                    [mobileButton, desktopButton].forEach(button => {
+                        if (button) {
+                            const buttonText = button.querySelector('.btn-text');
+                            const spinner = button.querySelector('.loading-spinner');
+                            
+                            button.disabled = true;
+                            buttonText.textContent = 'Generating...';
+                            spinner.classList.remove('hidden');
+                        }
+                    });
                     
                     try {
                         const response = await fetch(`/bills/${congressId}/summary`, {
@@ -621,21 +660,31 @@
                             `;
                             contentDiv.innerHTML = summaryHtml;
                             
-                            // Update button text
-                            buttonText.textContent = 'Regenerate Summary';
+                            // Update button text on both buttons
+                            [mobileButton, desktopButton].forEach(button => {
+                                if (button) {
+                                    const buttonText = button.querySelector('.btn-text');
+                                    buttonText.textContent = 'Regenerate Summary';
+                                }
+                            });
                             
                             // Show success message briefly
                             if (!data.cached) {
-                                const originalBtnText = buttonText.textContent;
-                                buttonText.textContent = 'Summary Generated!';
-                                button.classList.add('bg-green-100', 'text-green-700');
-                                button.classList.remove('bg-white', 'text-purple-600');
-                                
-                                setTimeout(() => {
-                                    buttonText.textContent = originalBtnText;
-                                    button.classList.remove('bg-green-100', 'text-green-700');
-                                    button.classList.add('bg-white', 'text-purple-600');
-                                }, 3000);
+                                [mobileButton, desktopButton].forEach(button => {
+                                    if (button) {
+                                        const buttonText = button.querySelector('.btn-text');
+                                        const originalBtnText = buttonText.textContent;
+                                        buttonText.textContent = 'Summary Generated!';
+                                        button.classList.add('bg-green-100', 'text-green-700');
+                                        button.classList.remove('bg-white', 'text-purple-600');
+                                        
+                                        setTimeout(() => {
+                                            buttonText.textContent = originalBtnText;
+                                            button.classList.remove('bg-green-100', 'text-green-700');
+                                            button.classList.add('bg-white', 'text-purple-600');
+                                        }, 3000);
+                                    }
+                                });
                             }
                             
                         } else {
@@ -649,12 +698,19 @@
                         document.getElementById('ai-summary-error-message').textContent = 'Network error. Please check your connection and try again.';
                         errorDiv.classList.remove('hidden');
                     } finally {
-                        // Reset button state
-                        button.disabled = false;
-                        spinner.classList.add('hidden');
-                        if (buttonText.textContent === 'Generating...') {
-                            buttonText.textContent = 'Generate AI Summary';
-                        }
+                        // Reset button state on both buttons
+                        [mobileButton, desktopButton].forEach(button => {
+                            if (button) {
+                                const buttonText = button.querySelector('.btn-text');
+                                const spinner = button.querySelector('.loading-spinner');
+                                
+                                button.disabled = false;
+                                spinner.classList.add('hidden');
+                                if (buttonText.textContent === 'Generating...') {
+                                    buttonText.textContent = 'Generate AI Summary';
+                                }
+                            }
+                        });
                     }
                 }
 
