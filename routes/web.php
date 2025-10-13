@@ -30,9 +30,13 @@ Route::get('/members/{bioguideId}', [MemberController::class, 'show'])->name('me
 
 // Chatbot routes
 Route::get('/chatbot', [ChatbotController::class, 'index'])->name('chatbot.index');
-Route::post('/chatbot/chat', [ChatbotController::class, 'chat'])->name('chatbot.chat');
 Route::get('/chatbot/suggestions', [ChatbotController::class, 'suggestions'])->name('chatbot.suggestions');
-Route::post('/chatbot/clear', [ChatbotController::class, 'clearConversation'])->name('chatbot.clear');
+
+// Chatbot interaction routes (requires authentication)
+Route::middleware('auth')->group(function () {
+    Route::post('/chatbot/chat', [ChatbotController::class, 'chat'])->name('chatbot.chat');
+    Route::post('/chatbot/clear', [ChatbotController::class, 'clearConversation'])->name('chatbot.clear');
+});
 
 // API routes for statistics
 Route::get('/api/congress/stats', [App\Http\Controllers\Api\CongressStatsController::class, 'index'])->name('api.congress.stats');

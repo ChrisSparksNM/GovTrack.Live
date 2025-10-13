@@ -1,14 +1,28 @@
 @extends('layouts.app')
 
-@section('title', 'Congressional AI Assistant')
+@section('title', 'Congress GPT - AI-Powered Legislative Assistant')
 
 @section('content')
 <div class="min-h-screen bg-gray-50">
     <div class="max-w-4xl mx-auto px-4 py-8">
         <!-- Header -->
         <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-900 mb-2">Congressional AI Assistant</h1>
-            <p class="text-gray-600">Ask questions about Congress, bills, members, and legislative trends</p>
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Congress GPT</h1>
+            <p class="text-gray-600">Your AI-powered assistant for Congress, bills, members, and legislative insights</p>
+            @guest
+                <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p class="text-blue-800 font-medium">🚀 Ready to explore Congress with AI?</p>
+                    <p class="text-blue-600 text-sm mt-1">Sign up for free to start chatting with Congress GPT and get instant insights on legislation, members, and more!</p>
+                    <div class="mt-3 space-x-3">
+                        <a href="{{ route('register') }}" class="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors">
+                            Sign Up Free
+                        </a>
+                        <a href="{{ route('login') }}" class="inline-block text-blue-600 px-6 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors">
+                            Already have an account?
+                        </a>
+                    </div>
+                </div>
+            @endguest
         </div>
 
         <!-- Chat Container -->
@@ -26,16 +40,36 @@
                     </div>
                     <div class="flex-1">
                         <div class="bg-gray-100 rounded-lg p-4">
-                            <p class="text-gray-800">
-                                👋 Hello! I'm your Congressional AI Assistant. I can help you explore and analyze data about U.S. Congress, including:
-                            </p>
-                            <ul class="mt-2 text-sm text-gray-600 list-disc list-inside">
-                                <li>Information about specific bills and legislation</li>
-                                <li>Member profiles and activity analysis</li>
-                                <li>Party and state representation insights</li>
-                                <li>Legislative trends and statistics</li>
-                            </ul>
-                            <p class="mt-2 text-gray-800">What would you like to know about Congress?</p>
+                            @auth
+                                <p class="text-gray-800">
+                                    👋 Hello! I'm Congress GPT, your AI-powered legislative assistant. I can help you explore and analyze data about U.S. Congress, including:
+                                </p>
+                                <ul class="mt-2 text-sm text-gray-600 list-disc list-inside">
+                                    <li>Information about specific bills and legislation</li>
+                                    <li>Member profiles and activity analysis</li>
+                                    <li>Party and state representation insights</li>
+                                    <li>Legislative trends and statistics</li>
+                                </ul>
+                                <p class="mt-2 text-gray-800">What would you like to know about Congress?</p>
+                            @else
+                                <p class="text-gray-800">
+                                    👋 Welcome to Congress GPT! I'm your AI-powered legislative assistant that can help you explore and analyze U.S. Congress data, including:
+                                </p>
+                                <ul class="mt-2 text-sm text-gray-600 list-disc list-inside">
+                                    <li>Real-time information about bills and legislation</li>
+                                    <li>Member profiles and voting records</li>
+                                    <li>Party and state representation insights</li>
+                                    <li>Legislative trends and statistical analysis</li>
+                                </ul>
+                                <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <p class="text-blue-800 font-medium text-sm">🔒 Sign up for free to start chatting and get instant AI-powered insights!</p>
+                                    <div class="mt-2">
+                                        <a href="{{ route('register') }}" class="inline-block bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700 transition-colors">
+                                            Create Free Account
+                                        </a>
+                                    </div>
+                                </div>
+                            @endauth
                         </div>
                     </div>
                 </div>
@@ -51,38 +85,58 @@
 
             <!-- Input Area -->
             <div class="border-t p-4">
-                <form id="chat-form" class="flex space-x-3" onsubmit="return false;">
-                    <input 
-                        type="text" 
-                        id="message-input" 
-                        placeholder="Ask me anything about Congress..." 
-                        class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent chat-input transition-colors"
-                        maxlength="1000"
-                        autocomplete="off"
-                    >
-                    <button 
-                        type="submit" 
-                        id="send-button"
-                        class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <span id="send-text">Send</span>
-                        <div id="send-spinner" class="hidden">
-                            <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
+                @auth
+                    <form id="chat-form" class="flex space-x-3" onsubmit="return false;">
+                        <input 
+                            type="text" 
+                            id="message-input" 
+                            placeholder="Ask Congress GPT anything about legislation..." 
+                            class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent chat-input transition-colors"
+                            maxlength="1000"
+                            autocomplete="off"
+                        >
+                        <button 
+                            type="submit" 
+                            id="send-button"
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <span id="send-text">Send</span>
+                            <div id="send-spinner" class="hidden">
+                                <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </div>
+                        </button>
+                    </form>
+                    <div class="flex justify-between items-center mt-2">
+                        <span class="text-xs text-gray-500">Press Enter to send</span>
+                        <button 
+                            id="clear-chat" 
+                            class="text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                        >
+                            Clear conversation
+                        </button>
+                    </div>
+                @else
+                    <div class="text-center py-4">
+                        <div class="flex space-x-3 mb-3">
+                            <input 
+                                type="text" 
+                                placeholder="Sign up to start chatting with Congress GPT..." 
+                                class="flex-1 border border-gray-300 rounded-lg px-4 py-2 bg-gray-50 cursor-not-allowed"
+                                disabled
+                            >
+                            <button 
+                                onclick="window.location.href='{{ route('register') }}'"
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200"
+                            >
+                                Sign Up
+                            </button>
                         </div>
-                    </button>
-                </form>
-                <div class="flex justify-between items-center mt-2">
-                    <span class="text-xs text-gray-500">Press Enter to send</span>
-                    <button 
-                        id="clear-chat" 
-                        class="text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                    >
-                        Clear conversation
-                    </button>
-                </div>
+                        <p class="text-xs text-gray-500">Create a free account to start using Congress GPT</p>
+                    </div>
+                @endauth
             </div>
         </div>
 
@@ -305,6 +359,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function sendMessage(message) {
+        // Check if user is authenticated
+        @guest
+            // Redirect to register page if not authenticated
+            window.location.href = '{{ route("register") }}';
+            return;
+        @endguest
+        
         // Add user message to chat
         addUserMessage(message);
         
@@ -512,6 +573,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     button.textContent = question;
                     button.addEventListener('click', (e) => {
                         e.preventDefault();
+                        @guest
+                            // Redirect to register page if not authenticated
+                            window.location.href = '{{ route("register") }}';
+                            return false;
+                        @endguest
                         if (!isTyping) {
                             messageInput.value = question;
                             sendMessage(question);

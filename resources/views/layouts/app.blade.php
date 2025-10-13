@@ -125,7 +125,10 @@
 
                             <a href="{{ route('chatbot.index') }}" 
                                class="group relative px-6 py-3 text-sm font-semibold tracking-wide transition-all duration-300 {{ request()->routeIs('chatbot.*') ? 'text-amber-300' : 'text-white hover:text-amber-300' }}">
-                                <span class="relative z-10">AI ASSISTANT</span>
+                                <span class="relative z-10">CONGRESS GPT</span>
+                                @guest
+                                    <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">NEW</span>
+                                @endguest
                                 @if(request()->routeIs('chatbot.*'))
                                     <div class="absolute inset-0 bg-white/10 rounded-lg border border-amber-400/30"></div>
                                 @endif
@@ -195,6 +198,14 @@
                             <a href="{{ route('members.index') }}" 
                                class="block px-4 py-3 text-base font-semibold {{ request()->routeIs('members.*') ? 'text-amber-300 bg-white/10' : 'text-white hover:text-amber-300 hover:bg-white/5' }} rounded-lg transition-all duration-300">
                                 Members
+                            </a>
+                            
+                            <a href="{{ route('chatbot.index') }}" 
+                               class="block px-4 py-3 text-base font-semibold {{ request()->routeIs('chatbot.*') ? 'text-amber-300 bg-white/10' : 'text-white hover:text-amber-300 hover:bg-white/5' }} rounded-lg transition-all duration-300 relative">
+                                Congress GPT
+                                @guest
+                                    <span class="inline-block ml-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">NEW</span>
+                                @endguest
                             </a>
                             
                             @auth
