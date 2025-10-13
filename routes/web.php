@@ -1,0 +1,57 @@
+<?php
+
+use App\Http\Controllers\BillController;
+use App\Http\Controllers\BillVoteController;
+use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MemberController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\TrackedBillController;
+use Illuminate\Support\Facades\Route;
+
+// Redirect root to bills index
+Route::get('/', function () {
+    return redirect()->route('bills.index');
+});
+
+// Bill routes
+Route::get('/bills', [BillController::class, 'index'])->name('bills.index');
+Route::get('/bill-text-versions/{congressId}', [BillController::class, 'fetchTextVersions'])->name('bills.text-versions');
+Route::get('/bill-text-proxy/{congressId}', [BillController::class, 'fetchTextProxy'])->name('bills.text-proxy');
+Route::get('/test-text-versions', function() { 
+    return view('test-text-versions'); 
+})->name('test.text-versions');
+Route::post('/bills/{congressId}/summary', [BillController::class, 'generateSummary'])->name('bills.summary');
+Route::get('/bills/{congressId}', [BillController::class, 'show'])->name('bills.show');
+
+// Member routes
+Route::get('/members', [MemberController::class, 'index'])->name('members.index');
+Route::get('/members/{bioguideId}', [MemberController::class, 'show'])->name('members.show');
+
+// Chatbot routes
+Route::get('/chatbot', [ChatbotController::class, 'index'])->name('chatbot.index');
+Route::post('/chatbot/chat', [ChatbotController::class, 'chat'])->name('chatbot.chat');
+Route::get('/chatbot/suggestions', [ChatbotController::class, 'suggestions'])->name('chatbot.suggestions');
+Route::post('/chatbot/clear', [ChatbotController::class, 'clearConversation'])->name('chatbot.clear');
+
+// API routes for statistics
+Route::get('/api/congress/stats', [App\Http\Controllers\Api\CongressStatsController::class, 'index'])->name('api.congress.stats');
+
+
+// User bill tracking routes (requires authentication)
+Route::middleware('auth')->group(function () {
+    Route::post('/bills/{bill}/track', [TrackedBillController::class, 'track'])->name('bills.track');
+    Route::delete('/bills/{bill}/untrack', [TrackedBillController::class, 'untrack'])->name('bills.untrack');
+    Route::put('/bills/{bill}/track', [TrackedBillController::class, 'update'])->name('bills.track.update');
+    Route::get('/dashboard', [TrackedBillController::class, 'dashboard'])->name('dashboard');
+    
+    // Bill voting routes
+    Route::post('/bills/{bill}/vote', [BillVoteController::class, 'vote'])->name('bills.vote');
+    
+    // Profile routes
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+});
+
+require __DIR__.'/auth.php';
