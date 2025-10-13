@@ -209,34 +209,40 @@
 }
 
 .typewriter {
-    line-height: 1.6;
+    line-height: 1.7;
     word-wrap: break-word;
     white-space: normal;
 }
 
 .typewriter p {
     margin: 0.75em 0;
-    line-height: 1.6;
+    line-height: 1.7;
+}
+
+.typewriter div {
+    margin: 0.5em 0;
 }
 
 .typewriter h1, .typewriter h2, .typewriter h3, .typewriter h4, .typewriter h5, .typewriter h6 {
-    margin: 1em 0 0.5em 0;
+    margin: 1.2em 0 0.6em 0;
     font-weight: 600;
     line-height: 1.3;
+    color: #1f2937;
 }
 
 .typewriter h1 { font-size: 1.5em; }
 .typewriter h2 { font-size: 1.3em; }
-.typewriter h3 { font-size: 1.1em; }
+.typewriter h3 { font-size: 1.15em; }
 
 .typewriter ul, .typewriter ol {
     margin: 0.75em 0;
-    padding-left: 1.5em;
+    padding-left: 0;
 }
 
 .typewriter li {
-    margin: 0.4em 0;
-    line-height: 1.5;
+    margin: 0.5em 0;
+    line-height: 1.6;
+    padding-left: 0.5em;
 }
 
 .typewriter strong {
@@ -246,35 +252,66 @@
 
 .typewriter em {
     font-style: italic;
+    color: #374151;
 }
 
 .typewriter code {
     background-color: #f3f4f6;
-    padding: 0.2em 0.4em;
-    border-radius: 0.25em;
+    padding: 0.25em 0.5em;
+    border-radius: 0.375em;
     font-size: 0.9em;
     font-family: 'Courier New', monospace;
+    border: 1px solid #e5e7eb;
 }
 
 .typewriter pre {
-    background-color: #f3f4f6;
+    background-color: #f9fafb;
     padding: 1em;
     border-radius: 0.5em;
     overflow-x: auto;
     margin: 1em 0;
+    border: 1px solid #e5e7eb;
 }
 
 .typewriter a {
     color: #2563eb;
     text-decoration: underline;
+    font-weight: 500;
 }
 
 .typewriter a:hover {
     color: #1d4ed8;
+    text-decoration: none;
 }
 
 .typewriter br {
     line-height: 1.8;
+}
+
+/* Enhanced formatting styles */
+.typewriter .bg-gray-50 {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+}
+
+.typewriter .border-b {
+    border-bottom-width: 1px;
+}
+
+.typewriter .border-gray-100 {
+    border-color: #f3f4f6;
+}
+
+.typewriter .text-blue-700 {
+    color: #1d4ed8;
+}
+
+.typewriter .text-indigo-700 {
+    color: #4338ca;
+}
+
+.typewriter .font-mono {
+    font-family: 'Courier New', monospace;
 }
 
 .message-fade-in {
