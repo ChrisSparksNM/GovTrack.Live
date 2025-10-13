@@ -517,6 +517,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const textColor = isError ? 'text-red-800' : 'text-gray-800';
         const iconColor = isError ? 'bg-red-500' : 'bg-gray-500';
         
+        // Create unique ID for this message
+        const uniqueId = 'typewriter-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        
         messageDiv.innerHTML = `
             <div class="flex-shrink-0">
                 <div class="w-8 h-8 ${iconColor} rounded-full flex items-center justify-center shadow-sm">
@@ -527,7 +530,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="flex-1">
                 <div class="${bgColor} rounded-lg p-4 shadow-md">
-                    <div class="${textColor} typewriter" id="typewriter-content">
+                    <div class="${textColor} typewriter" id="${uniqueId}">
                     </div>
                 </div>
             </div>
@@ -536,86 +539,164 @@ document.addEventListener('DOMContentLoaded', function() {
         chatMessages.appendChild(messageDiv);
         
         // Start typewriter effect
-        const typewriterElement = messageDiv.querySelector('#typewriter-content');
+        const typewriterElement = document.getElementById(uniqueId);
         typewriterEffect(typewriterElement, content);
         
         scrollToBottom();
     }
 
-    function typewriterEffect(element, content, speed = 20) {
-        // Always use typewriter effect, then format after completion
-        const words = content.split(' ');
-        let currentWordIndex = 0;
+    function typewriterEffect(element, content, speed = 25) {
+        if (!element) {
+            console.error('Typewriter element not found');
+            return;
+        }
+        
+        // Clear the element
         element.innerHTML = '';
         
-        function typeNextWord() {
-            if (currentWordIndex < words.length) {
-                // Add the next word
-                const wordsToShow = words.slice(0, currentWordIndex + 1);
-                element.textContent = wordsToShow.join(' ');
+        // Check if content has HTML (like bill links)
+        const hasHtml = /<[^>]*>/.test(content);
+        
+        if (hasHtml) {
+            // For HTML content, extract text for typing, then apply HTML after
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            const plainText = tempDiv.textContent || tempDiv.innerText || '';
+            
+            // Type the plain text first
+            typeText(element, plainText, speed, () => {
+                // After typing is complete, apply the full HTML formatting
+                formatCompletedText(element, content);
+                scrollToBottom();
+            });
+        } else {
+            // For plain text, type normally then format
+            typeText(element, content, speed, () => {
+                formatCompletedText(element, content);
+                scrollToBottom();
+            });
+        }
+    }
+
+    function typeText(element, text, speed, callback) {
+        const chars = text.split('');
+        let currentIndex = 0;
+        
+        function typeNextChar() {
+            if (currentIndex < chars.length) {
+                // Add the next character
+                const currentText = chars.slice(0, currentIndex + 1).join('');
+                element.textContent = currentText;
                 
-                currentWordIndex++;
-                setTimeout(typeNextWord, speed);
+                currentIndex++;
                 
-                // Auto-scroll during typing every few words
-                if (currentWordIndex % 10 === 0) {
+                // Vary speed for more natural feel
+                const nextSpeed = chars[currentIndex - 1] === ' ' ? speed * 0.3 : 
+                                 chars[currentIndex - 1] === '.' ? speed * 2 : speed;
+                setTimeout(typeNextChar, nextSpeed);
+                
+                // Auto-scroll during typing
+                if (currentIndex % 50 === 0) {
                     scrollToBottom();
                 }
             } else {
-                // Typing complete - now apply formatting
-                formatCompletedText(element, content);
-                scrollToBottom();
+                // Typing complete
+                if (callback) callback();
             }
         }
         
-        typeNextWord();
+        typeNextChar();
     }
 
     function formatCompletedText(element, content) {
-        // Apply formatting after typewriter effect is complete
-        let formatted = content;
+        // Check if content already has HTML (like bill links from backend)
+        const hasHtml = /<[^>]*>/.test(content);
         
-        // Format paragraphs (double line breaks)
-        formatted = formatted.replace(/\n\n+/g, '</p><p class="mb-4 leading-relaxed">');
-        
-        // Format headers (text ending with colon)
-        formatted = formatted.replace(/^(.+):$/gm, '<h3 class="text-lg font-semibold text-gray-900 mt-4 mb-2">$1</h3>');
-        
-        // Format bold text
-        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>');
-        
-        // Format bullet points
-        formatted = formatted.replace(/^• (.+)$/gm, '<li class="mb-1 ml-4">$1</li>');
-        
-        // Format numbered lists
-        formatted = formatted.replace(/^(\d+)\. (.+)$/gm, '<li class="mb-1 ml-4" style="list-style-type: decimal;">$2</li>');
-        
-        // Wrap in paragraph tags if not already formatted
-        if (!formatted.includes('<p>') && !formatted.includes('<h3>') && !formatted.includes('<li>')) {
-            formatted = '<p class="mb-4 leading-relaxed">' + formatted + '</p>';
-        } else {
-            // Wrap the content properly
-            if (formatted.includes('<li>')) {
-                // Handle lists
-                formatted = formatted.replace(/(<li.*?>.*?<\/li>)/gs, function(match) {
-                    if (match.includes('list-style-type: decimal')) {
-                        return '<ol class="list-decimal list-inside mb-4 ml-4">' + match.replace(/style="list-style-type: decimal;"/g, '') + '</ol>';
-                    } else {
-                        return '<ul class="list-disc list-inside mb-4 ml-4">' + match + '</ul>';
-                    }
-                });
+        if (hasHtml) {
+            // Content already has HTML formatting, just apply paragraph structure
+            let formatted = content;
+            
+            // Ensure proper paragraph breaks
+            formatted = formatted.replace(/\n\s*\n/g, '</p><p class="mb-4 leading-relaxed">');
+            
+            // Wrap in paragraph if not already wrapped
+            if (!formatted.startsWith('<p') && !formatted.startsWith('<h') && !formatted.startsWith('<ul') && !formatted.startsWith('<ol')) {
+                formatted = '<p class="mb-4 leading-relaxed">' + formatted + '</p>';
             }
             
-            // Wrap remaining text in paragraphs
-            if (!formatted.startsWith('<')) {
-                formatted = '<p class="mb-4 leading-relaxed">' + formatted;
-            }
-            if (!formatted.endsWith('>')) {
-                formatted = formatted + '</p>';
-            }
+            element.innerHTML = formatted;
+            return;
         }
         
-        element.innerHTML = formatted;
+        // Apply formatting for plain text content
+        let formatted = content;
+        
+        // Split into paragraphs first
+        const paragraphs = formatted.split(/\n\s*\n/);
+        const formattedParagraphs = [];
+        
+        paragraphs.forEach(paragraph => {
+            paragraph = paragraph.trim();
+            if (!paragraph) return;
+            
+            // Check if it's a header (ends with colon)
+            if (paragraph.match(/^.+:$/m)) {
+                const lines = paragraph.split('\n');
+                const processedLines = lines.map(line => {
+                    if (line.trim().endsWith(':')) {
+                        return `<h3 class="text-lg font-semibold text-gray-900 mt-4 mb-2">${line.trim()}</h3>`;
+                    }
+                    return `<p class="mb-2 leading-relaxed">${formatInlineText(line)}</p>`;
+                });
+                formattedParagraphs.push(processedLines.join('\n'));
+                return;
+            }
+            
+            // Check if it contains bullet points
+            if (paragraph.match(/^[-•*]\s+/m)) {
+                const items = paragraph.split('\n').filter(line => line.trim());
+                const listItems = items.map(item => {
+                    if (item.match(/^[-•*]\s+/)) {
+                        const text = item.replace(/^[-•*]\s+/, '');
+                        return `<li class="mb-1">${formatInlineText(text)}</li>`;
+                    }
+                    return `<p class="mb-2 leading-relaxed">${formatInlineText(item)}</p>`;
+                });
+                formattedParagraphs.push(`<ul class="list-disc list-inside mb-4 ml-4">${listItems.join('')}</ul>`);
+                return;
+            }
+            
+            // Check if it contains numbered lists
+            if (paragraph.match(/^\d+\.\s+/m)) {
+                const items = paragraph.split('\n').filter(line => line.trim());
+                const listItems = items.map(item => {
+                    if (item.match(/^\d+\.\s+/)) {
+                        const text = item.replace(/^\d+\.\s+/, '');
+                        return `<li class="mb-1">${formatInlineText(text)}</li>`;
+                    }
+                    return `<p class="mb-2 leading-relaxed">${formatInlineText(item)}</p>`;
+                });
+                formattedParagraphs.push(`<ol class="list-decimal list-inside mb-4 ml-4">${listItems.join('')}</ol>`);
+                return;
+            }
+            
+            // Regular paragraph
+            formattedParagraphs.push(`<p class="mb-4 leading-relaxed">${formatInlineText(paragraph)}</p>`);
+        });
+        
+        element.innerHTML = formattedParagraphs.join('\n');
+    }
+
+    function formatInlineText(text) {
+        // Format bold text
+        text = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>');
+        
+        // Format numbers and percentages (but avoid formatting if already in HTML tags)
+        if (!text.includes('<')) {
+            text = text.replace(/\b(\d+(?:,\d{3})*(?:\.\d+)?%?)\b/g, '<span class="font-medium text-blue-700">$1</span>');
+        }
+        
+        return text;
     }
 
     function showTypingIndicator() {

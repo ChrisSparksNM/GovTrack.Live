@@ -61,7 +61,7 @@ class ChatbotController extends Controller
             // Format for better readability but keep it simple for typewriter effect
             $formattedResponse = $this->formatSimpleResponse($cleanResponse);
             
-            // Add bill links to the formatted response
+            // Add bill links to the formatted response (this adds HTML links)
             $linkedResponse = $this->addBillLinks($formattedResponse);
 
             return response()->json([
@@ -468,8 +468,10 @@ class ChatbotController extends Controller
      */
     private function formatInlineElements(string $text): string
     {
-        // Just return the text as-is for now to avoid HTML complexity with typewriter
-        // The typewriter effect will handle the display, and we'll add formatting after
+        // Keep it simple but preserve important formatting markers
+        // Bold text markers
+        $text = preg_replace('/\*\*(.*?)\*\*/', '**$1**', $text);
+        
         return $text;
     }
 }
