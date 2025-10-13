@@ -63,3 +63,31 @@ Route::get('/auth/google', [App\Http\Controllers\Auth\GoogleController::class, '
 Route::get('/auth/google/callback', [App\Http\Controllers\Auth\GoogleController::class, 'callback'])->name('auth.google.callback');
 
 require __DIR__.'/auth.php';
+
+
+// Temporary debug route - remove after testing
+Route::get('/debug-chatbot', function() {
+    try {
+        $chatbotService = app('App\Services\CongressChatbotService');
+        $result = $chatbotService->askQuestion('What are the most popular policy areas this year?');
+        
+        return response()->json([
+            'debug' => true,
+            'success' => $result['success'],
+            'method' => $result['method'] ?? 'unknown',
+            'response_length' => strlen($result['response']),
+            'memory_usage' => round(memory_get_usage(true) / 1024 / 1024, 2) . ' MB',
+            'peak_memory' => round(memory_get_peak_usage(true) / 1024 / 1024, 2) . ' MB',
+            'error' => $result['error'] ?? null,
+            'first_200_chars' => substr($result['response'], 0, 200)
+        ]);
+    } catch (Exception $e) {
+        return response()->json([
+            'debug' => true,
+            'success' => false,
+            'exception' => $e->getMessage(),
+            'file' => $e->getFile() . ':' . $e->getLine(),
+            'memory_usage' => round(memory_get_usage(true) / 1024 / 1024, 2) . ' MB'
+        ], 500);
+    }
+});
