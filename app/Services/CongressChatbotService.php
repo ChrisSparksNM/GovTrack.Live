@@ -130,7 +130,7 @@ class CongressChatbotService
             // Use Claude's hybrid search for comprehensive analysis
             $claudeResults = $this->claudeSemanticService->hybridSearch($question, [
                 'limit' => 15,
-                'threshold' => 0.3,
+                'threshold' => 0.2,
                 'entity_types' => ['bill', 'member', 'bill_action']
             ]);
             
@@ -143,6 +143,10 @@ class CongressChatbotService
                 
                 // Build enhanced prompt with Claude analysis
                 $prompt = $this->buildClaudeEnhancedPrompt($question, $claudeContext, $databaseResult, $context);
+        // Add emphasis on recent/current data
+        if (preg_match('/\b(recent|current|2024|2025|latest|active|now)\b/i', $question)) {
+            $prompt .= "\n\nIMPORTANT: The user is asking about RECENT/CURRENT data. Please prioritize information from 2024-2025 over historical data. Focus on the most recent congressional session and current activity.";
+        }
                 
                 $response = $this->anthropicService->generateChatResponse($prompt);
                 
@@ -187,7 +191,7 @@ class CongressChatbotService
             // First try semantic search to find relevant content
             $semanticResults = $this->semanticSearchService->search($question, [
                 'limit' => 15,
-                'threshold' => 0.6,
+                'threshold' => 0.4,
                 'entity_types' => ['bill', 'member', 'bill_action']
             ]);
             
@@ -200,6 +204,10 @@ class CongressChatbotService
                 
                 // Build enhanced prompt with both semantic and database context
                 $prompt = $this->buildEnhancedPrompt($question, $semanticContext, $databaseResult, $context);
+        // Add emphasis on recent/current data
+        if (preg_match('/\b(recent|current|2024|2025|latest|active|now)\b/i', $question)) {
+            $prompt .= "\n\nIMPORTANT: The user is asking about RECENT/CURRENT data. Please prioritize information from 2024-2025 over historical data. Focus on the most recent congressional session and current activity.";
+        }
                 
                 $response = $this->anthropicService->generateChatResponse($prompt);
                 

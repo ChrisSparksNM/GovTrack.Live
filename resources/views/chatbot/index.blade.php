@@ -554,68 +554,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // Clear the element
         element.innerHTML = '';
         
-        // Check if content has HTML (like bill links)
-        const hasHtml = /<[^>]*>/.test(content);
+        // Format the content FIRST, then apply typewriter effect
+        const formattedContent = formatContentForTypewriter(content);
         
-        if (hasHtml) {
-            // For HTML content, extract text for typing, then apply HTML after
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = content;
-            const plainText = tempDiv.textContent || tempDiv.innerText || '';
-            
-            // Type the plain text first
-            typeText(element, plainText, speed, () => {
-                // After typing is complete, apply the full HTML formatting
-                formatCompletedText(element, content);
-                scrollToBottom();
-            });
-        } else {
-            // For plain text, type normally then format
-            typeText(element, content, speed, () => {
-                formatCompletedText(element, content);
-                scrollToBottom();
-            });
-        }
+        // Apply typewriter effect to the formatted HTML
+        typeFormattedHTML(element, formattedContent, speed);
     }
 
-    function typeText(element, text, speed, callback) {
-        const chars = text.split('');
-        let currentIndex = 0;
-        
-        function typeNextChar() {
-            if (currentIndex < chars.length) {
-                // Add the next character
-                const currentText = chars.slice(0, currentIndex + 1).join('');
-                element.textContent = currentText;
-                
-                currentIndex++;
-                
-                // Vary speed for more natural feel
-                const nextSpeed = chars[currentIndex - 1] === ' ' ? speed * 0.3 : 
-                                 chars[currentIndex - 1] === '.' ? speed * 2 : speed;
-                setTimeout(typeNextChar, nextSpeed);
-                
-                // Auto-scroll during typing
-                if (currentIndex % 50 === 0) {
-                    scrollToBottom();
-                }
-            } else {
-                // Typing complete
-                if (callback) callback();
-            }
-        }
-        
-        typeNextChar();
-    }
-
-    function formatCompletedText(element, content) {
-        console.log('Original content:', content); // Debug log
+    function formatContentForTypewriter(content) {
+        console.log('Formatting content:', content);
         
         // Check if content already has HTML (like bill links from backend)
         const hasHtml = /<[^>]*>/.test(content);
         
         if (hasHtml) {
-            // Content already has HTML formatting, just apply paragraph structure
+            // Content already has HTML formatting, just ensure proper paragraph structure
             let formatted = content;
             
             // Ensure proper paragraph breaks
@@ -626,14 +579,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 formatted = '<p class="mb-4 leading-relaxed">' + formatted + '</p>';
             }
             
-            element.innerHTML = formatted;
-            return;
+            return formatted;
         }
         
         // Apply formatting for plain text content
         let formatted = content;
         
-        // More aggressive paragraph splitting - try multiple patterns
+        // More aggressive paragraph splitting
         let paragraphs = [];
         
         // First try double line breaks
@@ -664,12 +616,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 paragraphs.push(sentences.slice(i, i + 3).join(' '));
             }
         }
-        // Last resort - just use the whole thing as one paragraph but look for headers
+        // Last resort - just use the whole thing as one paragraph
         else {
             paragraphs = [formatted];
         }
-        
-        console.log('Split into paragraphs:', paragraphs); // Debug log
         
         const formattedParagraphs = [];
         
@@ -737,9 +687,143 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        console.log('Final formatted paragraphs:', formattedParagraphs); // Debug log
-        element.innerHTML = formattedParagraphs.join('\n');
+        return formattedParagraphs.join('\n');
     }
+
+    function typeFormattedHTML(element, formattedHTML, speed = 25) {
+        // Create a temporary element to parse the HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = formattedHTML;
+        
+        // Extract all text nodes and their parent elements
+        const textNodes = [];
+        const walker = document.createTreeWalker(
+            tempDiv,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        
+        let node;
+        while (node = walker.nextNode()) {
+            if (node.textContent.trim()) {
+                textNodes.push({
+                    text: node.textContent,
+                    parentElement: node.parentElement.cloneNode(false),
+                    parentPath: getElementPath(node.parentElement, tempDiv)
+                });
+            }
+        }
+        
+        // Start typing effect
+        let currentNodeIndex = 0;
+        let currentCharIndex = 0;
+        
+        function typeNextChar() {
+            if (currentNodeIndex >= textNodes.length) {
+                // Typing complete
+                scrollToBottom();
+                return;
+            }
+            
+            const currentNode = textNodes[currentNodeIndex];
+            const currentText = currentNode.text;
+            
+            if (currentCharIndex >= currentText.length) {
+                // Move to next text node
+                currentNodeIndex++;
+                currentCharIndex = 0;
+                setTimeout(typeNextChar, speed * 0.5);
+                return;
+            }
+            
+            // Build the current state of the HTML
+            const currentHTML = buildCurrentHTML(textNodes, currentNodeIndex, currentCharIndex);
+            element.innerHTML = currentHTML;
+            
+            currentCharIndex++;
+            
+            // Vary speed for more natural feel
+            const currentChar = currentText[currentCharIndex - 1];
+            const nextSpeed = currentChar === ' ' ? speed * 0.3 : 
+                             currentChar === '.' ? speed * 2 : speed;
+            
+            setTimeout(typeNextChar, nextSpeed);
+            
+            // Auto-scroll during typing
+            if (currentCharIndex % 50 === 0) {
+                scrollToBottom();
+            }
+        }
+        
+        typeNextChar();
+    }
+    
+    function getElementPath(element, root) {
+        const path = [];
+        let current = element;
+        while (current && current !== root) {
+            const tagName = current.tagName.toLowerCase();
+            const className = current.className;
+            path.unshift({ tagName, className });
+            current = current.parentElement;
+        }
+        return path;
+    }
+    
+    function buildCurrentHTML(textNodes, currentNodeIndex, currentCharIndex) {
+        const tempDiv = document.createElement('div');
+        
+        for (let i = 0; i <= currentNodeIndex; i++) {
+            const node = textNodes[i];
+            const isCurrentNode = i === currentNodeIndex;
+            
+            // Find or create the parent element in our building HTML
+            let parentElement = findOrCreateElementByPath(tempDiv, node.parentPath);
+            
+            // Add the text (partial if current node)
+            const textToAdd = isCurrentNode ? 
+                node.text.substring(0, currentCharIndex) : 
+                node.text;
+            
+            if (textToAdd) {
+                parentElement.appendChild(document.createTextNode(textToAdd));
+            }
+        }
+        
+        return tempDiv.innerHTML;
+    }
+    
+    function findOrCreateElementByPath(root, path) {
+        let current = root;
+        
+        for (const pathItem of path) {
+            // Look for existing element
+            let found = false;
+            for (const child of current.children) {
+                if (child.tagName.toLowerCase() === pathItem.tagName && 
+                    child.className === pathItem.className) {
+                    current = child;
+                    found = true;
+                    break;
+                }
+            }
+            
+            // Create if not found
+            if (!found) {
+                const newElement = document.createElement(pathItem.tagName);
+                if (pathItem.className) {
+                    newElement.className = pathItem.className;
+                }
+                current.appendChild(newElement);
+                current = newElement;
+            }
+        }
+        
+        return current;
+    }
+
+
 
     function formatInlineText(text) {
         // Format bold text

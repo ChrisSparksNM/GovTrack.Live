@@ -50,62 +50,104 @@ echo "Starting embedding generation process..." . PHP_EOL;
 echo "This may take 10-30 minutes depending on your data size." . PHP_EOL;
 echo "" . PHP_EOL;
 
-// Generate embeddings using the artisan command
-$startTime = time();
-
-echo "Step 1: Generating bill embeddings..." . PHP_EOL;
-$output = [];
-$returnCode = 0;
-exec("php artisan embeddings:generate --type=bills $forceFlag 2>&1", $output, $returnCode);
-
-foreach ($output as $line) {
-    echo $line . PHP_EOL;
+// Function to run command with live output
+function runCommandWithProgress($command, $stepName) {
+    echo "🔄 $stepName" . PHP_EOL;
+    echo str_repeat("-", 60) . PHP_EOL;
+    
+    $startTime = time();
+    
+    // Use popen to get live output
+    $handle = popen($command . ' 2>&1', 'r');
+    
+    if ($handle) {
+        while (($line = fgets($handle)) !== false) {
+            echo $line;
+            flush(); // Force output to display immediately
+        }
+        
+        $returnCode = pclose($handle);
+        
+        $duration = time() - $startTime;
+        $minutes = floor($duration / 60);
+        $seconds = $duration % 60;
+        
+        if ($returnCode === 0) {
+            echo "✅ $stepName completed in {$minutes}m {$seconds}s" . PHP_EOL;
+        } else {
+            echo "❌ $stepName failed after {$minutes}m {$seconds}s (exit code: $returnCode)" . PHP_EOL;
+            return false;
+        }
+    } else {
+        echo "❌ Failed to start $stepName" . PHP_EOL;
+        return false;
+    }
+    
+    echo "" . PHP_EOL;
+    return true;
 }
 
-if ($returnCode !== 0) {
-    echo "❌ Bill embedding generation failed!" . PHP_EOL;
-    exit(1);
+// Function to show progress between steps
+function showProgress($step, $total, $description) {
+    $percentage = round(($step / $total) * 100);
+    $progressBar = str_repeat("█", floor($percentage / 5)) . str_repeat("░", 20 - floor($percentage / 5));
+    echo "📊 Overall Progress: [$progressBar] $percentage% - $description" . PHP_EOL;
+    echo "" . PHP_EOL;
 }
 
-echo "" . PHP_EOL;
-echo "Step 2: Generating member embeddings..." . PHP_EOL;
-$output = [];
-exec("php artisan embeddings:generate --type=members $forceFlag 2>&1", $output, $returnCode);
-
-foreach ($output as $line) {
-    echo $line . PHP_EOL;
-}
-
-if ($returnCode !== 0) {
-    echo "❌ Member embedding generation failed!" . PHP_EOL;
-    exit(1);
-}
-
-// Check if we have bill actions to embed
+$totalSteps = 2; // Bills + Members (+ Actions if available)
 $actionCount = DB::table('bill_actions')->count();
 if ($actionCount > 0) {
-    echo "" . PHP_EOL;
-    echo "Step 3: Generating action embeddings..." . PHP_EOL;
-    $output = [];
-    exec("php artisan embeddings:generate --type=actions $forceFlag 2>&1", $output, $returnCode);
+    $totalSteps = 3;
+}
+
+$overallStartTime = time();
+
+// Step 1: Generate bill embeddings
+showProgress(0, $totalSteps, "Starting bill embeddings...");
+if (!runCommandWithProgress("php artisan embeddings:generate --type=bills $forceFlag", "Step 1: Generating bill embeddings")) {
+    exit(1);
+}
+
+// Show intermediate progress
+$billEmbeddings = DB::table('embeddings')->where('entity_type', 'bill')->count();
+echo "✅ Created $billEmbeddings bill embeddings" . PHP_EOL;
+showProgress(1, $totalSteps, "Bills complete, starting members...");
+
+// Step 2: Generate member embeddings
+if (!runCommandWithProgress("php artisan embeddings:generate --type=members $forceFlag", "Step 2: Generating member embeddings")) {
+    exit(1);
+}
+
+// Show intermediate progress
+$memberEmbeddings = DB::table('embeddings')->where('entity_type', 'member')->count();
+echo "✅ Created $memberEmbeddings member embeddings" . PHP_EOL;
+
+// Step 3: Generate action embeddings (if available)
+if ($actionCount > 0) {
+    showProgress(2, $totalSteps, "Members complete, starting actions...");
     
-    foreach ($output as $line) {
-        echo $line . PHP_EOL;
+    if (!runCommandWithProgress("php artisan embeddings:generate --type=actions $forceFlag", "Step 3: Generating action embeddings")) {
+        echo "⚠️  Action embeddings failed, but continuing..." . PHP_EOL;
+    } else {
+        $actionEmbeddings = DB::table('embeddings')->where('entity_type', 'bill_action')->count();
+        echo "✅ Created $actionEmbeddings action embeddings" . PHP_EOL;
     }
 }
 
-$endTime = time();
-$duration = $endTime - $startTime;
-$minutes = floor($duration / 60);
-$seconds = $duration % 60;
+$overallEndTime = time();
+$totalDuration = $overallEndTime - $overallStartTime;
+$totalMinutes = floor($totalDuration / 60);
+$totalSeconds = $totalDuration % 60;
 
-echo "" . PHP_EOL;
+echo str_repeat("=", 60) . PHP_EOL;
 echo "🎉 EMBEDDING GENERATION COMPLETE!" . PHP_EOL;
-echo "Total time: {$minutes}m {$seconds}s" . PHP_EOL;
+echo str_repeat("=", 60) . PHP_EOL;
+echo "⏱️  Total time: {$totalMinutes}m {$totalSeconds}s" . PHP_EOL;
 
 // Show final stats
 $finalEmbeddings = DB::table('embeddings')->count();
-echo "Total embeddings created: $finalEmbeddings" . PHP_EOL;
+echo "📊 Total embeddings created: $finalEmbeddings" . PHP_EOL;
 
 $embeddingsByType = DB::table('embeddings')
     ->select('entity_type', DB::raw('COUNT(*) as count'))
@@ -113,12 +155,22 @@ $embeddingsByType = DB::table('embeddings')
     ->get();
 
 echo "" . PHP_EOL;
-echo "Embeddings by type:" . PHP_EOL;
+echo "📈 Embeddings by type:" . PHP_EOL;
 foreach ($embeddingsByType as $stat) {
-    echo "- {$stat->entity_type}: {$stat->count}" . PHP_EOL;
+    echo "   - {$stat->entity_type}: {$stat->count}" . PHP_EOL;
 }
+
+// Estimate storage size
+$avgEmbeddingSize = 1536 * 4; // 1536 dimensions * 4 bytes per float
+$estimatedSize = ($finalEmbeddings * $avgEmbeddingSize) / (1024 * 1024); // MB
+echo "" . PHP_EOL;
+echo "💾 Estimated storage size: " . round($estimatedSize, 2) . " MB" . PHP_EOL;
 
 echo "" . PHP_EOL;
 echo "✅ Your chatbot is now trained on all your congressional data!" . PHP_EOL;
-echo "Try asking: 'What healthcare bills have been introduced recently?'" . PHP_EOL;
-echo "Or: 'Show me bills about climate change'" . PHP_EOL;
+echo "" . PHP_EOL;
+echo "🧪 Try these test questions:" . PHP_EOL;
+echo "   • 'What healthcare bills have been introduced recently?'" . PHP_EOL;
+echo "   • 'Show me bills about climate change'" . PHP_EOL;
+echo "   • 'Which members are most active on defense issues?'" . PHP_EOL;
+echo "   • 'Find bills related to immigration'" . PHP_EOL;

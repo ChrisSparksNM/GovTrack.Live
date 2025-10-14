@@ -74,7 +74,7 @@ class SemanticSearchService
         $options = [
             'entity_types' => ['bill'],
             'limit' => $filters['limit'] ?? 15,
-            'threshold' => $filters['threshold'] ?? 0.6,
+            'threshold' => $filters['threshold'] ?? 0.4,
             'include_metadata' => true
         ];
         
@@ -86,6 +86,9 @@ class SemanticSearchService
         
         // Apply additional filters
         $filteredResults = $this->applyBillFilters($searchResults['results'], $filters);
+        
+        // Sort by recency to prioritize recent bills
+        $filteredResults = $this->sortByRecency($filteredResults);
         
         return [
             'success' => true,
@@ -103,7 +106,7 @@ class SemanticSearchService
         $options = [
             'entity_types' => ['member'],
             'limit' => $filters['limit'] ?? 15,
-            'threshold' => $filters['threshold'] ?? 0.6,
+            'threshold' => $filters['threshold'] ?? 0.4,
             'include_metadata' => true
         ];
         
