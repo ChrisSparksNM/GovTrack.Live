@@ -61,9 +61,9 @@ class ExecutiveOrderController extends Controller
             'years', 
             'statuses'
         ));
-    }
-    
-    /**
+    }    
+ 
+   /**
      * Display the specified executive order
      */
     public function show(ExecutiveOrder $executiveOrder): View
