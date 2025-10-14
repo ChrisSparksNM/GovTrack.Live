@@ -536,13 +536,24 @@ class ExecutiveOrderScraperService
      */
     public function getScrapingStats(): array
     {
+        $lastScrapedRaw = ExecutiveOrder::max('last_scraped_at');
+        $lastScraped = null;
+        
+        if ($lastScrapedRaw) {
+            try {
+                $lastScraped = Carbon::parse($lastScrapedRaw);
+            } catch (\Exception $e) {
+                $lastScraped = null;
+            }
+        }
+        
         return [
             'total_orders' => ExecutiveOrder::count(),
             'fully_scraped' => ExecutiveOrder::where('is_fully_scraped', true)->count(),
             'needs_scraping' => ExecutiveOrder::where('is_fully_scraped', false)->count(),
             'recent_orders' => ExecutiveOrder::where('signed_date', '>=', now()->subDays(30))->count(),
             'current_year' => ExecutiveOrder::whereYear('signed_date', now()->year)->count(),
-            'last_scraped' => ExecutiveOrder::max('last_scraped_at'),
+            'last_scraped' => $lastScraped,
         ];
     }
 }
