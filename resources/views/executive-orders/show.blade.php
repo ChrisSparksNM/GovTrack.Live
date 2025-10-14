@@ -236,9 +236,7 @@
         </div>
     </div>
 </div>
-@endsection
 
-@push('scripts')
 <script>
 // AI Summary Generation
 async function generateAISummary(slug) {
@@ -346,4 +344,4 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 </script>
-@endpush
+@endsection
