@@ -39,6 +39,13 @@ class CongressChatbotService
     public function askQuestion(string $question, array $context = []): array
     {
         try {
+            // Enhanced executive order query detection
+            if (preg_match('/\b(executive order|presidential action|president.*sign|EO \d+)/i', $question)) {
+                $executiveOrderResult = $this->handleExecutiveOrderQuery($question, $context);
+                if ($executiveOrderResult['success']) {
+                    return $executiveOrderResult;
+                }
+            }
             // Try Claude semantic search first (preferred)
             if ($this->claudeSemanticService) {
                 $claudeResult = $this->askQuestionWithClaudeSemantics($question, $context);
@@ -131,7 +138,7 @@ class CongressChatbotService
             $claudeResults = $this->claudeSemanticService->hybridSearch($question, [
                 'limit' => 15,
                 'threshold' => 0.2,
-                'entity_types' => ['bill', 'member', 'bill_action']
+                'entity_types' => ['bill', 'member', 'bill_action', 'executive_order']
             ]);
             
             if ($claudeResults['success'] && !empty($claudeResults['results'])) {
@@ -192,7 +199,7 @@ class CongressChatbotService
             $semanticResults = $this->semanticSearchService->search($question, [
                 'limit' => 15,
                 'threshold' => 0.4,
-                'entity_types' => ['bill', 'member', 'bill_action']
+                'entity_types' => ['bill', 'member', 'bill_action', 'executive_order']
             ]);
             
             if ($semanticResults['success'] && !empty($semanticResults['results'])) {
@@ -1300,5 +1307,99 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         $html = preg_replace('/(?<!>)\n(?!<)/', '<br>', $html);
         
         return $html;
+    }
+
+    /**
+     * Handle executive order specific queries
+     */
+    private function handleExecutiveOrderQuery(string $question, array $context = []): array
+    {
+        try {
+            // Use semantic search to find relevant executive orders
+            $executiveOrderResults = $this->semanticSearchService->searchExecutiveOrders($question, [
+                'limit' => 10,
+                'threshold' => 0.3
+            ]);
+            
+            if ($executiveOrderResults['success'] && !empty($executiveOrderResults['executive_orders'])) {
+                // Build context from executive order results
+                $executiveOrderContext = $this->buildExecutiveOrderContext($executiveOrderResults['executive_orders']);
+                
+                // Also get database statistics for comprehensive answer
+                $databaseResult = $this->databaseQueryService->queryDatabase($question);
+                
+                // Build enhanced prompt with executive order focus
+                $prompt = "Based on this executive order data, answer the user's question:\n\n";
+                $prompt .= $executiveOrderContext . "\n\n";
+                
+                if ($databaseResult['success']) {
+                    $prompt .= "Additional context: " . $databaseResult['analysis'] . "\n\n";
+                }
+                
+                $prompt .= "User Question: " . $question . "\n\n";
+                $prompt .= "Please provide a comprehensive answer focusing on executive orders. ";
+                $prompt .= "Include specific order numbers, dates, and titles when relevant. ";
+                $prompt .= "If the question is about recent orders, prioritize 2024-2025 data.";
+                
+                $response = $this->anthropicService->generateChatResponse($prompt);
+                
+                if ($response['success']) {
+                    return [
+                        'success' => true,
+                        'response' => $response['response'],
+                        'response_html' => $this->convertToHtml($response['response']),
+                        'method' => 'executive_order_semantic',
+                        'data_sources' => [
+                            'Executive order semantic search',
+                            'Presidential actions database'
+                        ],
+                        'executive_orders_count' => count($executiveOrderResults['executive_orders'])
+                    ];
+                }
+            }
+            
+            return ['success' => false, 'method' => 'executive_order_failed'];
+            
+        } catch (\Exception $e) {
+            Log::error('Executive order query error', [
+                'question' => $question,
+                'error' => $e->getMessage()
+            ]);
+            
+            return ['success' => false, 'method' => 'executive_order_failed'];
+        }
+    }
+
+    /**
+     * Build context from executive order search results
+     */
+    private function buildExecutiveOrderContext(array $executiveOrders): string
+    {
+        $context = "Executive Orders Found:\n";
+        
+        foreach ($executiveOrders as $result) {
+            $order = $result['model'];
+            $similarity = $result['similarity'] ?? 0;
+            
+            $context .= "\n";
+            if ($order->order_number) {
+                $context .= "Executive Order {$order->order_number}: ";
+            }
+            $context .= "{$order->title}\n";
+            $context .= "Signed: {$order->signed_date->format('F j, Y')}\n";
+            $context .= "Status: {$order->status}\n";
+            
+            if ($order->summary) {
+                $context .= "Summary: " . Str::limit($order->summary, 200) . "\n";
+            }
+            
+            if ($order->topics && count($order->topics) > 0) {
+                $context .= "Topics: " . implode(', ', $order->topics) . "\n";
+            }
+            
+            $context .= "Relevance: " . round($similarity * 100, 1) . "%\n";
+        }
+        
+        return $context;
     }
 }

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Bill;
 use App\Models\Member;
 use App\Models\BillAction;
+use App\Models\ExecutiveOrder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -22,7 +23,7 @@ class SemanticSearchService
      */
     public function search(string $query, array $options = []): array
     {
-        $entityTypes = $options['entity_types'] ?? ['bill', 'member', 'bill_action'];
+        $entityTypes = $options['entity_types'] ?? ['bill', 'member', 'bill_action', 'executive_order'];
         $limit = $options['limit'] ?? 20;
         $threshold = $options['threshold'] ?? 0.7;
         $includeMetadata = $options['include_metadata'] ?? true;
@@ -128,6 +129,35 @@ class SemanticSearchService
     }
 
     /**
+     * Search for executive orders with semantic matching
+     */
+    public function searchExecutiveOrders(string $query, array $filters = []): array
+    {
+        $options = [
+            'entity_types' => ['executive_order'],
+            'limit' => $filters['limit'] ?? 15,
+            'threshold' => $filters['threshold'] ?? 0.4,
+            'include_metadata' => true
+        ];
+        
+        $searchResults = $this->search($query, $options);
+        
+        if (!$searchResults['success']) {
+            return $searchResults;
+        }
+        
+        // Apply additional filters
+        $filteredResults = $this->applyExecutiveOrderFilters($searchResults['results'], $filters);
+        
+        return [
+            'success' => true,
+            'query' => $query,
+            'executive_orders' => $filteredResults,
+            'total_found' => count($filteredResults)
+        ];
+    }
+
+    /**
      * Find related content based on a specific entity
      */
     public function findRelated(string $entityType, int $entityId, int $limit = 10): array
@@ -204,6 +234,12 @@ class SemanticSearchService
             case 'bill_action':
                 $models = BillAction::whereIn('id', $entityIds)
                     ->with('bill')
+                    ->get()
+                    ->keyBy('id');
+                break;
+                
+            case 'executive_order':
+                $models = ExecutiveOrder::whereIn('id', $entityIds)
                     ->get()
                     ->keyBy('id');
                 break;
@@ -313,6 +349,41 @@ class SemanticSearchService
             
             // Filter by current members only
             if (isset($filters['current_only']) && $filters['current_only'] && !$metadata['current_member']) {
+                return false;
+            }
+            
+            return true;
+        });
+    }
+
+    /**
+     * Apply additional filters to executive order search results
+     */
+    private function applyExecutiveOrderFilters(array $results, array $filters): array
+    {
+        if (empty($filters)) {
+            return $results;
+        }
+        
+        return array_filter($results, function($result) use ($filters) {
+            if ($result['entity_type'] !== 'executive_order') {
+                return true;
+            }
+            
+            $metadata = $result['metadata'] ?? [];
+            
+            // Filter by year
+            if (isset($filters['year']) && $metadata['year'] != $filters['year']) {
+                return false;
+            }
+            
+            // Filter by status
+            if (isset($filters['status']) && $metadata['status'] !== $filters['status']) {
+                return false;
+            }
+            
+            // Filter by recent orders only
+            if (isset($filters['recent_only']) && $filters['recent_only'] && !$metadata['is_recent']) {
                 return false;
             }
             
