@@ -121,9 +121,9 @@ class ExecutiveOrder extends Model
     /**
      * Get the year from signed date
      */
-    public function getYearAttribute(): int
+    public function getYearAttribute(): ?int
     {
-        return $this->signed_date->year;
+        return $this->signed_date?->year;
     }
 
     /**
