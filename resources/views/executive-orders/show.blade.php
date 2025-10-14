@@ -147,26 +147,28 @@
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">Full Text</h2>
                 <div class="prose prose-gray max-w-none">
-                    <div class="text-gray-700 leading-relaxed space-y-4">
+                    <div class="text-gray-700 leading-relaxed">
                         @php
-                            // Format the content by adding proper paragraph breaks
+                            // The content should now have preserved formatting from the scraper
                             $content = $executiveOrder->content;
                             
-                            // Split on common section patterns
-                            $content = preg_replace('/\b(Section \d+\.)/i', "\n\n$1", $content);
-                            $content = preg_replace('/\b(Sec\. \d+\.)/i', "\n\n$1", $content);
-                            $content = preg_replace('/\b(Executive Order)/i', "\n\n$1", $content);
-                            $content = preg_replace('/\b(By the authority vested in me)/i', "\n\n$1", $content);
-                            $content = preg_replace('/\b(it is hereby ordered:)/i', "$1\n\n", $content);
-                            
-                            // Split into paragraphs and clean up
+                            // Split into paragraphs based on double line breaks
                             $paragraphs = preg_split('/\n\s*\n/', trim($content));
                             $paragraphs = array_filter(array_map('trim', $paragraphs));
                         @endphp
                         
                         @foreach($paragraphs as $paragraph)
                             @if(trim($paragraph))
-                                <p class="mb-4">{{ $paragraph }}</p>
+                                @php
+                                    // Check if this looks like a section header
+                                    $isHeader = preg_match('/^(Section \d+\.|Sec\. \d+\.|Executive Order|By the authority vested)/i', trim($paragraph));
+                                @endphp
+                                
+                                @if($isHeader)
+                                    <h3 class="text-lg font-semibold text-gray-900 mt-6 mb-3">{{ $paragraph }}</h3>
+                                @else
+                                    <p class="mb-4 text-justify">{{ $paragraph }}</p>
+                                @endif
                             @endif
                         @endforeach
                     </div>

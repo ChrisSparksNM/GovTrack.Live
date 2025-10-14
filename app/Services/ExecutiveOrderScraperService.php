@@ -425,7 +425,7 @@ class ExecutiveOrderScraperService
     }
     
     /**
-     * Extract clean text content from a DOM node
+     * Extract clean text content from a DOM node while preserving formatting
      */
     private function extractTextContent($node): string
     {
@@ -440,14 +440,51 @@ class ExecutiveOrderScraperService
             $script->parentNode->removeChild($script);
         }
         
-        // Get text content and clean it up
-        $content = $node->textContent;
+        // Convert HTML to formatted text while preserving structure
+        $content = $this->htmlToFormattedText($node);
         
-        // Clean up whitespace
-        $content = preg_replace('/\s+/', ' ', $content);
-        $content = trim($content);
+        return trim($content);
+    }
+    
+    /**
+     * Convert HTML node to formatted text preserving paragraph structure
+     */
+    private function htmlToFormattedText($node): string
+    {
+        $text = '';
         
-        return $content;
+        foreach ($node->childNodes as $child) {
+            if ($child->nodeType === XML_TEXT_NODE) {
+                // Add text content, normalizing whitespace but preserving line breaks
+                $textContent = preg_replace('/[ \t]+/', ' ', $child->textContent);
+                $text .= $textContent;
+            } elseif ($child->nodeType === XML_ELEMENT_NODE) {
+                $tagName = strtolower($child->tagName);
+                
+                // Handle block elements that should create paragraph breaks
+                if (in_array($tagName, ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section', 'article'])) {
+                    $text .= "\n\n" . $this->htmlToFormattedText($child) . "\n\n";
+                }
+                // Handle list items
+                elseif ($tagName === 'li') {
+                    $text .= "\n• " . $this->htmlToFormattedText($child) . "\n";
+                }
+                // Handle line breaks
+                elseif ($tagName === 'br') {
+                    $text .= "\n";
+                }
+                // Handle other elements recursively
+                else {
+                    $text .= $this->htmlToFormattedText($child);
+                }
+            }
+        }
+        
+        // Clean up excessive whitespace while preserving paragraph structure
+        $text = preg_replace('/\n{3,}/', "\n\n", $text);
+        $text = preg_replace('/[ \t]+/', ' ', $text);
+        
+        return $text;
     }
     
     /**
