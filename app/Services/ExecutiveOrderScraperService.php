@@ -26,8 +26,12 @@ class ExecutiveOrderScraperService
             'new_orders' => 0,
             'updated_orders' => 0,
             'errors' => 0,
-            'pages_scraped' => 0
+            'pages_scraped' => 0,
+            'duplicates_skipped' => 0
         ];
+        
+        // Track processed URLs to avoid duplicates within the same session
+        $processedUrls = [];
         
         Log::info('Starting executive orders scraping', ['max_pages' => $maxPages]);
         
@@ -46,12 +50,25 @@ class ExecutiveOrderScraperService
                 }
                 
                 $stats['pages_scraped']++;
-                $stats['total_found'] += count($orderLinks);
                 
-                echo "   Found " . count($orderLinks) . " executive orders on page {$page}" . PHP_EOL;
-                
-                // Process each executive order
+                // Remove duplicates within this page and across pages
+                $uniqueOrders = [];
                 foreach ($orderLinks as $orderData) {
+                    $url = $orderData['url'];
+                    if (!in_array($url, $processedUrls)) {
+                        $uniqueOrders[] = $orderData;
+                        $processedUrls[] = $url;
+                    } else {
+                        $stats['duplicates_skipped']++;
+                    }
+                }
+                
+                $stats['total_found'] += count($uniqueOrders);
+                
+                echo "   Found " . count($orderLinks) . " entries (" . count($uniqueOrders) . " unique) on page {$page}" . PHP_EOL;
+                
+                // Process each unique executive order
+                foreach ($uniqueOrders as $orderData) {
                     try {
                         $result = $this->processExecutiveOrder($orderData);
                         
@@ -133,56 +150,97 @@ class ExecutiveOrderScraperService
     private function parseListingPage(string $html): array
     {
         $orders = [];
+        $seenUrls = []; // Track URLs within this page to avoid duplicates
         
         $dom = new DOMDocument();
         @$dom->loadHTML($html);
         $xpath = new DOMXPath($dom);
         
-        // Look for executive order entries - adjust selectors based on actual HTML structure
-        $entries = $xpath->query('//article[contains(@class, "post")] | //div[contains(@class, "post")] | //div[contains(@class, "entry")]');
+        // Try multiple selectors to find executive order entries
+        $selectors = [
+            '//article[contains(@class, "post")]',
+            '//div[contains(@class, "post")]',
+            '//div[contains(@class, "entry")]',
+            '//li[contains(@class, "post")]',
+            '//div[contains(@class, "item")]'
+        ];
         
-        foreach ($entries as $entry) {
-            try {
-                // Extract title and link
-                $titleElement = $xpath->query('.//h2/a | .//h3/a | .//a[contains(@class, "title")]', $entry)->item(0);
-                if (!$titleElement) {
-                    continue;
+        foreach ($selectors as $selector) {
+            $entries = $xpath->query($selector);
+            
+            if ($entries->length > 0) {
+                foreach ($entries as $entry) {
+                    try {
+                        // Try multiple ways to find the title and link
+                        $titleElement = null;
+                        $titleSelectors = [
+                            './/h2/a',
+                            './/h3/a', 
+                            './/h4/a',
+                            './/a[contains(@class, "title")]',
+                            './/a[contains(@class, "post-title")]',
+                            './/a[1]' // First link in the entry
+                        ];
+                        
+                        foreach ($titleSelectors as $titleSelector) {
+                            $titleElement = $xpath->query($titleSelector, $entry)->item(0);
+                            if ($titleElement) {
+                                break;
+                            }
+                        }
+                        
+                        if (!$titleElement) {
+                            continue;
+                        }
+                        
+                        $title = trim($titleElement->textContent);
+                        $relativeUrl = $titleElement->getAttribute('href');
+                        
+                        if (empty($title) || empty($relativeUrl)) {
+                            continue;
+                        }
+                        
+                        $fullUrl = $this->resolveUrl($relativeUrl);
+                        
+                        // Skip if we've already seen this URL on this page
+                        if (in_array($fullUrl, $seenUrls)) {
+                            continue;
+                        }
+                        
+                        // Make sure it's an executive order
+                        if (!$this->isExecutiveOrder($title, $relativeUrl)) {
+                            continue;
+                        }
+                        
+                        $seenUrls[] = $fullUrl;
+                        
+                        // Extract date if available
+                        $dateElement = $xpath->query('.//time | .//span[contains(@class, "date")] | .//div[contains(@class, "date")]', $entry)->item(0);
+                        $dateString = $dateElement ? trim($dateElement->textContent) : null;
+                        
+                        // Extract summary if available
+                        $summaryElement = $xpath->query('.//p | .//div[contains(@class, "excerpt")]', $entry)->item(0);
+                        $summary = $summaryElement ? trim($summaryElement->textContent) : null;
+                        
+                        $orders[] = [
+                            'title' => $title,
+                            'url' => $fullUrl,
+                            'date_string' => $dateString,
+                            'summary' => $summary
+                        ];
+                        
+                    } catch (\Exception $e) {
+                        Log::warning('Error parsing listing entry', [
+                            'error' => $e->getMessage()
+                        ]);
+                        continue;
+                    }
                 }
                 
-                $title = trim($titleElement->textContent);
-                $relativeUrl = $titleElement->getAttribute('href');
-                
-                if (empty($title) || empty($relativeUrl)) {
-                    continue;
+                // If we found entries with this selector, don't try others
+                if (count($orders) > 0) {
+                    break;
                 }
-                
-                // Make sure it's an executive order
-                if (!$this->isExecutiveOrder($title, $relativeUrl)) {
-                    continue;
-                }
-                
-                $fullUrl = $this->resolveUrl($relativeUrl);
-                
-                // Extract date if available
-                $dateElement = $xpath->query('.//time | .//span[contains(@class, "date")] | .//div[contains(@class, "date")]', $entry)->item(0);
-                $dateString = $dateElement ? trim($dateElement->textContent) : null;
-                
-                // Extract summary if available
-                $summaryElement = $xpath->query('.//p | .//div[contains(@class, "excerpt")]', $entry)->item(0);
-                $summary = $summaryElement ? trim($summaryElement->textContent) : null;
-                
-                $orders[] = [
-                    'title' => $title,
-                    'url' => $fullUrl,
-                    'date_string' => $dateString,
-                    'summary' => $summary
-                ];
-                
-            } catch (\Exception $e) {
-                Log::warning('Error parsing listing entry', [
-                    'error' => $e->getMessage()
-                ]);
-                continue;
             }
         }
         

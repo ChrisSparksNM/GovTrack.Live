@@ -71,6 +71,7 @@ try {
     echo "🔍 Total Found: {$results['total_found']}" . PHP_EOL;
     echo "✅ New Orders: {$results['new_orders']}" . PHP_EOL;
     echo "🔄 Updated Orders: {$results['updated_orders']}" . PHP_EOL;
+    echo "⏭️  Duplicates Skipped: " . ($results['duplicates_skipped'] ?? 0) . PHP_EOL;
     echo "❌ Errors: {$results['errors']}" . PHP_EOL;
     
     if ($results['errors'] > 0) {
