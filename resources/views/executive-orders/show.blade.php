@@ -147,7 +147,29 @@
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">Full Text</h2>
                 <div class="prose prose-gray max-w-none">
-                    <div class="whitespace-pre-wrap text-gray-700 leading-relaxed">{{ $executiveOrder->content }}</div>
+                    <div class="text-gray-700 leading-relaxed space-y-4">
+                        @php
+                            // Format the content by adding proper paragraph breaks
+                            $content = $executiveOrder->content;
+                            
+                            // Split on common section patterns
+                            $content = preg_replace('/\b(Section \d+\.)/i', "\n\n$1", $content);
+                            $content = preg_replace('/\b(Sec\. \d+\.)/i', "\n\n$1", $content);
+                            $content = preg_replace('/\b(Executive Order)/i', "\n\n$1", $content);
+                            $content = preg_replace('/\b(By the authority vested in me)/i', "\n\n$1", $content);
+                            $content = preg_replace('/\b(it is hereby ordered:)/i', "$1\n\n", $content);
+                            
+                            // Split into paragraphs and clean up
+                            $paragraphs = preg_split('/\n\s*\n/', trim($content));
+                            $paragraphs = array_filter(array_map('trim', $paragraphs));
+                        @endphp
+                        
+                        @foreach($paragraphs as $paragraph)
+                            @if(trim($paragraph))
+                                <p class="mb-4">{{ $paragraph }}</p>
+                            @endif
+                        @endforeach
+                    </div>
                 </div>
             </div>
         @else
