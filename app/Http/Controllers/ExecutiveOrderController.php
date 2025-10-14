@@ -145,8 +145,7 @@ class ExecutiveOrderController extends Controller
             'stats' => $stats
         ]);
     }
-}    
-
+    
     /**
      * Generate AI summary for an executive order using Anthropic Claude
      */
@@ -225,4 +224,4 @@ class ExecutiveOrderController extends Controller
                 'message' => 'An error occurred while generating the summary. Please try again later.'
             ], 500);
         }
-    }
+    }}
