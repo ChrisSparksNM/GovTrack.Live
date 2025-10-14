@@ -123,6 +123,15 @@
                                 <div class="absolute inset-0 bg-gradient-to-r from-amber-400/0 via-amber-400/10 to-amber-400/0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                             </a>
 
+                            <a href="{{ route('executive-orders.index') }}" 
+                               class="group relative px-6 py-3 text-sm font-semibold tracking-wide transition-all duration-300 {{ request()->routeIs('executive-orders.*') ? 'text-amber-300' : 'text-white hover:text-amber-300' }}">
+                                <span class="relative z-10">EXECUTIVE ORDERS</span>
+                                @if(request()->routeIs('executive-orders.*'))
+                                    <div class="absolute inset-0 bg-white/10 rounded-lg border border-amber-400/30"></div>
+                                @endif
+                                <div class="absolute inset-0 bg-gradient-to-r from-amber-400/0 via-amber-400/10 to-amber-400/0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                            </a>
+
                             <a href="{{ route('chatbot.index') }}" 
                                class="group relative px-6 py-3 text-sm font-semibold tracking-wide transition-all duration-300 {{ request()->routeIs('chatbot.*') ? 'text-amber-300' : 'text-white hover:text-amber-300' }}">
                                 <span class="relative z-10">CONGRESS GPT</span>
@@ -198,6 +207,11 @@
                             <a href="{{ route('members.index') }}" 
                                class="block px-4 py-3 text-base font-semibold {{ request()->routeIs('members.*') ? 'text-amber-300 bg-white/10' : 'text-white hover:text-amber-300 hover:bg-white/5' }} rounded-lg transition-all duration-300">
                                 Members
+                            </a>
+                            
+                            <a href="{{ route('executive-orders.index') }}" 
+                               class="block px-4 py-3 text-base font-semibold {{ request()->routeIs('executive-orders.*') ? 'text-amber-300 bg-white/10' : 'text-white hover:text-amber-300 hover:bg-white/5' }} rounded-lg transition-all duration-300">
+                                Executive Orders
                             </a>
                             
                             <a href="{{ route('chatbot.index') }}" 
