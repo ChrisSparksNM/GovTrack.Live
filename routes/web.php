@@ -31,6 +31,7 @@ Route::get('/members/{bioguideId}', [MemberController::class, 'show'])->name('me
 // Executive Orders routes
 Route::get('/executive-orders', [App\Http\Controllers\ExecutiveOrderController::class, 'index'])->name('executive-orders.index');
 Route::get('/executive-orders/{executiveOrder}', [App\Http\Controllers\ExecutiveOrderController::class, 'show'])->name('executive-orders.show');
+Route::post('/executive-orders/{executiveOrder}/summary', [App\Http\Controllers\ExecutiveOrderController::class, 'generateSummary'])->name('executive-orders.summary');
 Route::get('/api/executive-orders', [App\Http\Controllers\ExecutiveOrderController::class, 'api'])->name('executive-orders.api');
 Route::get('/api/executive-orders/stats', [App\Http\Controllers\ExecutiveOrderController::class, 'stats'])->name('executive-orders.stats');
 

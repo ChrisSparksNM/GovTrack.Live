@@ -3,11 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\ExecutiveOrder;
+use App\Services\AnthropicService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ExecutiveOrderController extends Controller
 {
+    protected AnthropicService $anthropicService;
+
+    public function __construct(AnthropicService $anthropicService)
+    {
+        $this->anthropicService = $anthropicService;
+    }
     /**
      * Display a listing of executive orders
      */
@@ -137,4 +145,84 @@ class ExecutiveOrderController extends Controller
             'stats' => $stats
         ]);
     }
-}
+}    
+
+    /**
+     * Generate AI summary for an executive order using Anthropic Claude
+     */
+    public function generateSummary(ExecutiveOrder $executiveOrder): JsonResponse
+    {
+        try {
+            if (empty($executiveOrder->content)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Executive order content not available for summary generation. Please ensure the content has been scraped.'
+                ], 400);
+            }
+
+            // Check if we already have a recent AI summary (within 7 days)
+            if ($executiveOrder->ai_summary && 
+                $executiveOrder->ai_summary_generated_at && 
+                $executiveOrder->ai_summary_generated_at->gt(now()->subDays(7))) {
+                
+                // Convert cached markdown summary to HTML
+                $summaryHtml = $this->anthropicService->convertMarkdownToHtml($executiveOrder->ai_summary);
+                
+                return response()->json([
+                    'success' => true,
+                    'summary' => $executiveOrder->ai_summary,
+                    'summary_html' => $summaryHtml,
+                    'generated_at' => $executiveOrder->ai_summary_generated_at->format('M j, Y g:i A'),
+                    'cached' => true
+                ]);
+            }
+
+            // Generate new AI summary using Anthropic
+            $result = $this->anthropicService->generateExecutiveOrderSummary(
+                $executiveOrder->content,
+                $executiveOrder->title,
+                $executiveOrder->order_number
+            );
+
+            if (!$result['success']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to generate AI summary: ' . ($result['error'] ?? 'Unknown error')
+                ], 500);
+            }
+
+            // Store the AI summary in the database
+            $executiveOrder->update([
+                'ai_summary' => $result['summary'],
+                'ai_summary_html' => $result['summary_html'] ?? null,
+                'ai_summary_generated_at' => now(),
+                'ai_summary_metadata' => [
+                    'model' => 'claude-3-5-sonnet-20241022',
+                    'input_tokens' => $result['usage']['input_tokens'] ?? 0,
+                    'output_tokens' => $result['usage']['output_tokens'] ?? 0,
+                    'generated_at' => now()->toISOString()
+                ]
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'summary' => $result['summary'],
+                'summary_html' => $result['summary_html'] ?? null,
+                'generated_at' => now()->format('M j, Y g:i A'),
+                'cached' => false,
+                'usage' => $result['usage'] ?? null
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error generating executive order AI summary', [
+                'executive_order_id' => $executiveOrder->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while generating the summary. Please try again later.'
+            ], 500);
+        }
+    }

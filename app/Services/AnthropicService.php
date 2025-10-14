@@ -142,6 +142,131 @@ Please keep the summary informative but accessible to the general public, avoidi
     }
 
     /**
+     * Generate a summary of executive order content using Claude
+     */
+    public function generateExecutiveOrderSummary(string $content, string $title, ?string $orderNumber = null): array
+    {
+        try {
+            $prompt = $this->buildExecutiveOrderSummaryPrompt($content, $title, $orderNumber);
+            
+            // Log the request for debugging
+            Log::info('Making Anthropic API request for executive order', [
+                'url' => $this->baseUrl . '/messages',
+                'model' => 'claude-3-5-sonnet-20241022',
+                'api_key_length' => strlen($this->apiKey),
+                'prompt_length' => strlen($prompt)
+            ]);
+            
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'x-api-key' => $this->apiKey,
+                'anthropic-version' => '2023-06-01'
+            ])->timeout(120)->post($this->baseUrl . '/messages', [
+                'model' => 'claude-3-5-sonnet-20241022',
+                'max_tokens' => 4000,
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => $prompt
+                    ]
+                ]
+            ]);
+
+            Log::info('Anthropic API response for executive order', [
+                'status' => $response->status(),
+                'headers' => $response->headers(),
+                'body_preview' => substr($response->body(), 0, 500)
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $summary = $data['content'][0]['text'] ?? '';
+                
+                return [
+                    'success' => true,
+                    'summary' => $summary,
+                    'summary_html' => $this->convertMarkdownToHtml($summary),
+                    'usage' => [
+                        'input_tokens' => $data['usage']['input_tokens'] ?? 0,
+                        'output_tokens' => $data['usage']['output_tokens'] ?? 0
+                    ]
+                ];
+            } else {
+                Log::error('Anthropic API error for executive order', [
+                    'status' => $response->status(),
+                    'headers' => $response->headers(),
+                    'body' => $response->body()
+                ]);
+                
+                return [
+                    'success' => false,
+                    'error' => 'API request failed: ' . $response->status() . ' - ' . $response->body()
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::error('Anthropic service error for executive order', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => 'Service error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Build the prompt for executive order summary generation
+     */
+    private function buildExecutiveOrderSummaryPrompt(string $content, string $title, ?string $orderNumber = null): string
+    {
+        // Limit content to prevent token limit issues
+        $maxTextLength = 50000;
+        if (strlen($content) > $maxTextLength) {
+            $content = substr($content, 0, $maxTextLength) . "\n\n[Note: Executive order text truncated due to length. This summary is based on the first portion of the order.]";
+        }
+        
+        $orderInfo = $orderNumber ? "Executive Order {$orderNumber}: {$title}" : $title;
+        
+        return "Please analyze this presidential executive order and provide a comprehensive summary. The executive order is: {$orderInfo}
+
+EXECUTIVE ORDER TEXT:
+{$content}
+
+Please provide a structured summary with the following sections:
+
+## Executive Summary
+A brief 2-3 sentence overview of what this executive order does and its main purpose.
+
+## Key Directives
+- List the main directives and actions this executive order mandates
+- Include specific requirements for federal agencies
+- Highlight any new policies, programs, or regulatory changes
+
+## Affected Agencies & Stakeholders
+- Which federal agencies are tasked with implementation?
+- Who will be impacted by these changes (businesses, individuals, other entities)?
+- Any coordination requirements between agencies
+
+## Implementation & Timeline
+- Any specific deadlines or timelines mentioned
+- Reporting requirements or review processes
+- New offices, committees, or working groups established
+
+## Policy Impact
+- What policy areas does this address (healthcare, environment, economy, etc.)?
+- How does this relate to or change existing policies?
+- Any potential benefits or concerns for different groups
+
+## Background & Context
+- Brief context on why this executive order was issued
+- Any references to previous orders it modifies or revokes
+
+Please keep the summary informative but accessible to the general public, avoiding excessive legal jargon while maintaining accuracy.";
+    }
+
+    /**
      * Generate a quick summary for display in lists
      */
     public function generateQuickSummary(string $billText, string $billTitle): array
