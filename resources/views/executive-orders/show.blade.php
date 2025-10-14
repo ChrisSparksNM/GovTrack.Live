@@ -289,16 +289,24 @@ function updateAISummarySection(data) {
     let aiSummarySection = document.getElementById('ai-summary-section');
     
     if (!aiSummarySection) {
-        // Create new AI summary section
-        const summarySection = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:has(h2:contains("Summary"))');
+        // Find the summary section by looking for h2 with "Summary" text
+        let summarySection = null;
+        const h2Elements = document.querySelectorAll('h2');
+        for (let h2 of h2Elements) {
+            if (h2.textContent.trim() === 'Summary') {
+                summarySection = h2.closest('.bg-white');
+                break;
+            }
+        }
+        
         if (summarySection) {
             aiSummarySection = document.createElement('div');
             aiSummarySection.id = 'ai-summary-section';
             aiSummarySection.className = 'bg-blue-50 rounded-lg border border-blue-200 p-6 mb-6';
             summarySection.parentNode.insertBefore(aiSummarySection, summarySection.nextSibling);
         } else {
-            // Insert after the header section
-            const headerSection = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-8.mb-6');
+            // Insert after the header section (the one with p-8 class)
+            const headerSection = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-8');
             if (headerSection) {
                 aiSummarySection = document.createElement('div');
                 aiSummarySection.id = 'ai-summary-section';
