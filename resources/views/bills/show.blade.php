@@ -4,7 +4,7 @@
 @section('description', 'Read the full text and details of ' . ($bill->congress_id ?? 'this congressional bill') . '. ' . Str::limit(strip_tags($bill->summary ?? $bill->title ?? 'Congressional legislation details'), 150))
 @section('keywords', 'congress, bill, legislation, ' . strtolower($bill->type ?? '') . ', ' . strtolower($bill->congress_id ?? '') . ', government, politics')
 
-@section('og_title', ($bill->congress_id ?? 'Bill') . ' - ' . Str::limit($bill->title ?? 'Bill Details', 60))
+@section('og_title', Str::limit($bill->title ?? 'Congressional Bill Details', 60))
 @section('og_description', 'Read the full text and details of ' . ($bill->congress_id ?? 'this congressional bill') . '. ' . Str::limit(strip_tags($bill->summary ?? $bill->title ?? 'Congressional legislation details'), 150))
 @section('og_type', 'article')
 @section('og_image', asset('images/bills-social-card.jpg'))
