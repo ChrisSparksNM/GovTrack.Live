@@ -163,13 +163,9 @@
                 <div>
                     <label for="sort" class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
                     <select name="sort" id="sort" class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
-                        <option value="recent_activity" {{ $sortBy === 'recent_activity' ? 'selected' : '' }}>Recent Activity (Smart)</option>
-                        <option value="latest_action_date" {{ $sortBy === 'latest_action_date' ? 'selected' : '' }}>Latest Action</option>
+                        <option value="recent_activity" {{ $sortBy === 'recent_activity' ? 'selected' : '' }}>Recent Activity</option>
                         <option value="most_voted" {{ $sortBy === 'most_voted' ? 'selected' : '' }}>Most Voted</option>
                         <option value="introduced_date" {{ $sortBy === 'introduced_date' ? 'selected' : '' }}>Introduced Date</option>
-                        <option value="update_date" {{ $sortBy === 'update_date' ? 'selected' : '' }}>Last Updated</option>
-                        <option value="title" {{ $sortBy === 'title' ? 'selected' : '' }}>Title</option>
-                        <option value="congress_id" {{ $sortBy === 'congress_id' ? 'selected' : '' }}>Bill Number</option>
                     </select>
                 </div>
             </div>

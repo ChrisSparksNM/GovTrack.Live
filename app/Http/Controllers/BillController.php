@@ -66,7 +66,7 @@ class BillController extends Controller
             }
             
             // Apply sorting
-            $validSorts = ['latest_action_date', 'introduced_date', 'update_date', 'title', 'congress_id', 'most_voted', 'recent_activity'];
+            $validSorts = ['introduced_date', 'most_voted', 'recent_activity'];
             if (in_array($sortBy, $validSorts)) {
                 if ($sortBy === 'most_voted') {
                     $query->orderByMostVoted($sortOrder === 'asc' ? 'asc' : 'desc');
