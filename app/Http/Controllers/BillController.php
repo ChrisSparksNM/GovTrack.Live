@@ -29,7 +29,7 @@ class BillController extends Controller
         $hasTextFilter = $request->get('has_text') === '1';
         $congress = $request->get('congress', 119);
         $billType = $request->get('type', '');
-        $sortBy = $request->get('sort', 'latest_action_date');
+        $sortBy = $request->get('sort', 'recent_activity');
         $sortOrder = $request->get('order', 'desc');
         $perPage = min(100, max(10, (int) $request->get('per_page', 25)));
         
@@ -66,15 +66,17 @@ class BillController extends Controller
             }
             
             // Apply sorting
-            $validSorts = ['latest_action_date', 'introduced_date', 'update_date', 'title', 'congress_id', 'most_voted'];
+            $validSorts = ['latest_action_date', 'introduced_date', 'update_date', 'title', 'congress_id', 'most_voted', 'recent_activity'];
             if (in_array($sortBy, $validSorts)) {
                 if ($sortBy === 'most_voted') {
                     $query->orderByMostVoted($sortOrder === 'asc' ? 'asc' : 'desc');
+                } elseif ($sortBy === 'recent_activity') {
+                    $query->orderByRecentActivity($sortOrder === 'asc' ? 'asc' : 'desc');
                 } else {
                     $query->orderBy($sortBy, $sortOrder === 'asc' ? 'asc' : 'desc');
                 }
             } else {
-                $query->orderBy('latest_action_date', 'desc');
+                $query->orderByRecentActivity('desc');
             }
             
             // Get paginated results

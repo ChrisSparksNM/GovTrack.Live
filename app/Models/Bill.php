@@ -161,6 +161,29 @@ class Bill extends Model
     }
 
     /**
+     * Scope to order by recent activity on older bills.
+     * This prioritizes bills that were introduced earlier but have recent actions,
+     * rather than newly introduced bills.
+     */
+    public function scopeOrderByRecentActivity($query, $direction = 'desc')
+    {
+        // Calculate a score that favors older bills with recent activity
+        // Formula: Days since latest action (negative for recent) + (Days since introduction / 10)
+        // This gives higher scores to older bills with recent activity
+        return $query->selectRaw('
+            bills.*,
+            CASE 
+                WHEN latest_action_date IS NOT NULL AND introduced_date IS NOT NULL THEN
+                    (DATEDIFF(NOW(), latest_action_date) * -1) + (DATEDIFF(NOW(), introduced_date) / 10)
+                WHEN latest_action_date IS NOT NULL THEN
+                    (DATEDIFF(NOW(), latest_action_date) * -1)
+                ELSE
+                    -999999
+            END as activity_score
+        ')->orderBy('activity_score', $direction === 'desc' ? 'desc' : 'asc');
+    }
+
+    /**
      * Get the bill sponsors.
      */
     public function sponsors(): HasMany
