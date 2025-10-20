@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
-@section('title', $executiveOrder->title)
+@section('title', 'Executive Order ' . ($executiveOrder->order_number ?? '') . ' - ' . Str::limit($executiveOrder->title ?? 'Executive Order Details', 60))
+@section('description', 'Read the full text of Executive Order ' . ($executiveOrder->order_number ?? '') . ': ' . Str::limit(strip_tags($executiveOrder->summary ?? $executiveOrder->title ?? 'Executive Order details'), 150))
+@section('keywords', 'executive order, president, white house, ' . strtolower($executiveOrder->order_number ?? '') . ', government, politics, administration')
+
+@section('og_title', 'Executive Order ' . ($executiveOrder->order_number ?? '') . ' - ' . Str::limit($executiveOrder->title ?? 'Executive Order Details', 60))
+@section('og_description', 'Read the full text of Executive Order ' . ($executiveOrder->order_number ?? '') . ': ' . Str::limit(strip_tags($executiveOrder->summary ?? $executiveOrder->title ?? 'Executive Order details'), 150))
+@section('og_type', 'article')
+@section('og_image', asset('images/executive-order-social-card.jpg'))
+@section('og_image_alt', 'Executive Order ' . ($executiveOrder->order_number ?? '') . ': ' . Str::limit($executiveOrder->title ?? 'Executive Order', 50))
+
+@section('twitter_title', 'Executive Order ' . ($executiveOrder->order_number ?? '') . ' - ' . Str::limit($executiveOrder->title ?? 'Executive Order Details', 60))
+@section('twitter_description', 'Executive Order ' . ($executiveOrder->order_number ?? '') . ': ' . Str::limit(strip_tags($executiveOrder->summary ?? $executiveOrder->title ?? 'Executive Order details'), 180))
 
 @section('content')
 <div class="min-h-screen bg-gray-50">

@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
-@section('title', 'Executive Orders')
+@section('title', 'Executive Orders - GovTrack.Live')
+@section('description', 'Browse and track executive orders from the White House. Read full text, summaries, and stay informed about presidential directives and administrative actions.')
+@section('keywords', 'executive orders, president, white house, presidential directives, administration, government, politics, executive actions')
+
+@section('og_title', 'Executive Orders - Presidential Directives & Actions')
+@section('og_description', 'Browse and track executive orders from the White House. Read full text, summaries, and stay informed about presidential directives and administrative actions.')
+@section('og_type', 'website')
+@section('og_image', asset('images/executive-orders-social-card.jpg'))
+@section('og_image_alt', 'Executive Orders - GovTrack.Live Presidential Tracking')
+
+@section('twitter_title', 'Executive Orders - Presidential Directives & Actions')
+@section('twitter_description', 'Browse executive orders from the White House. Read full text and stay informed about presidential directives.')
 
 @section('content')
 <div class="min-h-screen bg-gray-50">

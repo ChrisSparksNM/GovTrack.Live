@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
-@section('title', 'Congressional Bills')
+@section('title', 'Congressional Bills - GovTrack.Live')
+@section('description', 'Browse and search thousands of congressional bills from the current Congress. Track legislation, read full text, and stay informed about what\'s happening in Congress.')
+@section('keywords', 'congressional bills, congress, legislation, house bills, senate bills, government, politics, democracy, tracking')
+
+@section('og_title', 'Congressional Bills - Track Current Legislation')
+@section('og_description', 'Browse and search thousands of congressional bills from the current Congress. Track legislation, read full text, and stay informed about what\'s happening in Congress.')
+@section('og_type', 'website')
+@section('og_image', asset('images/bills-social-card.jpg'))
+@section('og_image_alt', 'Congressional Bills - GovTrack.Live Legislative Tracking')
+
+@section('twitter_title', 'Congressional Bills - Track Current Legislation')
+@section('twitter_description', 'Browse thousands of congressional bills. Track legislation, read full text, and stay informed about Congress.')
 
 @section('content')
 <!-- Hero Section -->

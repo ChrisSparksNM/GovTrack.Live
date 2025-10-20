@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
-@section('title', $bill->title ?? 'Bill Details')
+@section('title', ($bill->congress_id ?? 'Bill') . ' - ' . Str::limit($bill->title ?? 'Bill Details', 60))
+@section('description', 'Read the full text and details of ' . ($bill->congress_id ?? 'this congressional bill') . '. ' . Str::limit(strip_tags($bill->summary ?? $bill->title ?? 'Congressional legislation details'), 150))
+@section('keywords', 'congress, bill, legislation, ' . strtolower($bill->type ?? '') . ', ' . strtolower($bill->congress_id ?? '') . ', government, politics')
+
+@section('og_title', ($bill->congress_id ?? 'Bill') . ' - ' . Str::limit($bill->title ?? 'Bill Details', 60))
+@section('og_description', 'Read the full text and details of ' . ($bill->congress_id ?? 'this congressional bill') . '. ' . Str::limit(strip_tags($bill->summary ?? $bill->title ?? 'Congressional legislation details'), 150))
+@section('og_type', 'article')
+@section('og_image', asset('images/bill-social-card.jpg'))
+@section('og_image_alt', 'Congressional Bill: ' . ($bill->congress_id ?? 'Bill Details'))
+
+@section('twitter_title', ($bill->congress_id ?? 'Bill') . ' - ' . Str::limit($bill->title ?? 'Bill Details', 60))
+@section('twitter_description', Str::limit(strip_tags($bill->summary ?? $bill->title ?? 'Congressional legislation details'), 200))
 
 @section('content')
 <div class="container mx-auto px-4 py-8">

@@ -16,6 +16,46 @@
             gtag('config', 'G-JVJPH17KLK');
         </script>
 
+        <!-- SEO Meta Tags -->
+        <meta name="description" content="Join GovTrack.Live to track congressional bills, executive orders, and legislative activity. Stay informed about government transparency and democratic processes.">
+        <meta name="keywords" content="congress, bills, legislation, executive orders, government, politics, tracking, democracy, transparency, login, register">
+        <meta name="author" content="GovTrack.Live">
+        <meta name="robots" content="index, follow">
+        <link rel="canonical" href="{{ url()->current() }}">
+
+        <!-- OpenGraph Meta Tags -->
+        <meta property="og:site_name" content="GovTrack.Live">
+        <meta property="og:title" content="GovTrack.Live - Legislative Oversight & Government Transparency">
+        <meta property="og:description" content="Join GovTrack.Live to track congressional bills, executive orders, and legislative activity. Stay informed about government transparency and democratic processes.">
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="{{ url()->current() }}">
+        <meta property="og:image" content="{{ asset('images/govtrack-social-card.jpg') }}">
+        <meta property="og:image:width" content="1200">
+        <meta property="og:image:height" content="630">
+        <meta property="og:image:alt" content="GovTrack.Live - Legislative Oversight Platform">
+        <meta property="og:locale" content="en_US">
+
+        <!-- Twitter Card Meta Tags -->
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:site" content="@GovTrackLive">
+        <meta name="twitter:creator" content="@GovTrackLive">
+        <meta name="twitter:title" content="GovTrack.Live - Legislative Oversight & Government Transparency">
+        <meta name="twitter:description" content="Join GovTrack.Live to track congressional bills, executive orders, and legislative activity in real-time.">
+        <meta name="twitter:image" content="{{ asset('images/govtrack-social-card.jpg') }}">
+        <meta name="twitter:image:alt" content="GovTrack.Live - Legislative Oversight Platform">
+
+        <!-- Additional Meta Tags -->
+        <meta name="theme-color" content="#1e3a8a">
+        <meta name="msapplication-TileColor" content="#1e3a8a">
+        <meta name="application-name" content="GovTrack.Live">
+
+        <!-- Favicon and Icons -->
+        <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+        <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('images/govtrack-social-card.jpg') }}">
+        <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon.ico') }}">
+        <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('favicon.ico') }}">
+        <link rel="manifest" href="{{ asset('site.webmanifest') }}">
+
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
