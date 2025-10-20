@@ -30,10 +30,17 @@
         <meta property="og:type" content="@yield('og_type', 'website')">
         <meta property="og:url" content="{{ url()->current() }}">
         <meta property="og:image" content="@yield('og_image', asset('images/govtrack-social-card.jpg'))">
+        <meta property="og:image:secure_url" content="@yield('og_image', asset('images/govtrack-social-card.jpg'))">
+        <meta property="og:image:type" content="image/jpeg">
         <meta property="og:image:width" content="1200">
         <meta property="og:image:height" content="630">
         <meta property="og:image:alt" content="@yield('og_image_alt', 'GovTrack.Live - Legislative Oversight Platform')">
         <meta property="og:locale" content="en_US">
+        
+        <!-- Facebook specific -->
+        <meta property="fb:app_id" content="">
+        <meta property="article:author" content="GovTrack.Live">
+        <meta property="article:publisher" content="GovTrack.Live">
 
         <!-- Twitter Card Meta Tags -->
         <meta name="twitter:card" content="summary_large_image">
@@ -41,8 +48,8 @@
         <meta name="twitter:creator" content="@GovTrackLive">
         <meta name="twitter:title" content="@yield('twitter_title', 'GovTrack.Live - Legislative Oversight')">
         <meta name="twitter:description" content="@yield('twitter_description', 'Track congressional bills, executive orders, and legislative activity in real-time.')">
-        <meta name="twitter:image" content="@yield('twitter_image', asset('images/govtrack-social-card.jpg'))">
-        <meta name="twitter:image:alt" content="@yield('twitter_image_alt', 'GovTrack.Live - Legislative Oversight Platform')">
+        <meta name="twitter:image" content="@yield('og_image', asset('images/govtrack-social-card.jpg'))">
+        <meta name="twitter:image:alt" content="@yield('og_image_alt', 'GovTrack.Live - Legislative Oversight Platform')">
 
         <!-- Additional Meta Tags -->
         <meta name="theme-color" content="#1e3a8a">
