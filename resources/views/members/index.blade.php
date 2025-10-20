@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
-@section('title', 'Members of Congress')
+@section('title', 'Members of Congress - GovTrack.Live')
+@section('description', 'Browse profiles of current and former members of the U.S. House and Senate. Find contact information, voting records, and biographical details for all Congress members.')
+@section('keywords', 'congress members, senators, representatives, house, senate, congress profiles, voting records, contact information')
+
+@section('og_title', 'Members of Congress - Representatives & Senators')
+@section('og_description', 'Browse profiles of current and former members of the U.S. House and Senate. Find contact information, voting records, and biographical details.')
+@section('og_type', 'website')
+@section('og_image', asset('images/members-social-card.jpg'))
+@section('og_image_alt', 'Members of Congress - GovTrack.Live Congressional Profiles')
+
+@section('twitter_title', 'Members of Congress - Representatives & Senators')
+@section('twitter_description', 'Browse Congress member profiles. Find contact info, voting records, and biographical details for House and Senate members.')
 
 @section('content')
 <div class="container mx-auto px-4 py-8">

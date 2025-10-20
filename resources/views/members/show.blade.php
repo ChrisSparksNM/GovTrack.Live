@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
-@section('title', $member->display_name . ' - Member Profile')
+@section('title', ($member->display_name ?? 'Member') . ' - Congress Member Profile')
+@section('description', 'View the profile of ' . ($member->display_name ?? 'this Congress member') . ', ' . ($member->party ?? '') . ' from ' . ($member->state ?? '') . '. Find contact information, committee assignments, and legislative activity.')
+@section('keywords', 'congress member, ' . strtolower($member->display_name ?? '') . ', ' . strtolower($member->party ?? '') . ', ' . strtolower($member->state ?? '') . ', representative, senator, profile')
+
+@section('og_title', ($member->display_name ?? 'Member') . ' - Congress Member Profile')
+@section('og_description', 'View the profile of ' . ($member->display_name ?? 'this Congress member') . ', ' . ($member->party ?? '') . ' from ' . ($member->state ?? '') . '. Contact info, committees, and legislative activity.')
+@section('og_type', 'profile')
+@section('og_image', $member->image_url ?? asset('images/member-social-card.jpg'))
+@section('og_image_alt', 'Congress Member Profile: ' . ($member->display_name ?? 'Member'))
+
+@section('twitter_title', ($member->display_name ?? 'Member') . ' - Congress Member Profile')
+@section('twitter_description', ($member->display_name ?? 'Congress member') . ', ' . ($member->party ?? '') . ' from ' . ($member->state ?? '') . '. Contact info and legislative activity.')
 
 @section('content')
 <div class="container mx-auto px-4 py-8">

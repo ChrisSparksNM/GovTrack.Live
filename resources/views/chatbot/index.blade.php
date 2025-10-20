@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
 @section('title', 'Congress GPT - AI-Powered Legislative Assistant')
+@section('description', 'Ask questions about congressional bills, executive orders, and legislative processes. Get instant AI-powered answers about government activities and political developments.')
+@section('keywords', 'congress gpt, ai assistant, legislative ai, congress chatbot, bill analysis, government ai, political assistant')
+
+@section('og_title', 'Congress GPT - AI Legislative Assistant')
+@section('og_description', 'Ask questions about congressional bills, executive orders, and legislative processes. Get instant AI-powered answers about government activities.')
+@section('og_type', 'website')
+@section('og_image', asset('images/chatbot-social-card.jpg'))
+@section('og_image_alt', 'Congress GPT - AI-Powered Legislative Assistant')
+
+@section('twitter_title', 'Congress GPT - AI Legislative Assistant')
+@section('twitter_description', 'Ask questions about congressional bills and legislative processes. Get instant AI-powered government insights.')
 
 @section('content')
 <div class="min-h-screen bg-gray-50">

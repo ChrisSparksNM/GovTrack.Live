@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
-@section('title', 'My Dashboard')
+@section('title', 'My Dashboard - GovTrack.Live')
+@section('description', 'Track and manage your followed congressional bills and executive orders. Stay updated on legislative developments that matter to you.')
+@section('keywords', 'dashboard, tracked bills, followed legislation, personal tracking, congress updates, bill alerts')
+
+@section('og_title', 'My Dashboard - Personal Legislative Tracking')
+@section('og_description', 'Track and manage your followed congressional bills and executive orders. Stay updated on legislative developments that matter to you.')
+@section('og_type', 'website')
+@section('og_image', asset('images/dashboard-social-card.jpg'))
+@section('og_image_alt', 'Personal Dashboard - GovTrack.Live Legislative Tracking')
+
+@section('twitter_title', 'My Dashboard - Personal Legislative Tracking')
+@section('twitter_description', 'Track your followed bills and executive orders. Stay updated on legislative developments that matter to you.')
 
 @section('content')
 <div class="container mx-auto px-4 py-8">
