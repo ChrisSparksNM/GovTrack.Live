@@ -48,6 +48,13 @@ Route::middleware('auth')->group(function () {
 // API routes for statistics
 Route::get('/api/congress/stats', [App\Http\Controllers\Api\CongressStatsController::class, 'index'])->name('api.congress.stats');
 
+// Sitemap routes
+Route::get('/sitemap.xml', [App\Http\Controllers\SitemapController::class, 'index'])->name('sitemap.index');
+Route::get('/sitemap-static.xml', [App\Http\Controllers\SitemapController::class, 'static'])->name('sitemap.static');
+Route::get('/sitemap-bills.xml', [App\Http\Controllers\SitemapController::class, 'bills'])->name('sitemap.bills');
+Route::get('/sitemap-executive-orders.xml', [App\Http\Controllers\SitemapController::class, 'executiveOrders'])->name('sitemap.executive-orders');
+Route::get('/sitemap-members.xml', [App\Http\Controllers\SitemapController::class, 'members'])->name('sitemap.members');
+
 
 // User bill tracking routes (requires authentication)
 Route::middleware('auth')->group(function () {
