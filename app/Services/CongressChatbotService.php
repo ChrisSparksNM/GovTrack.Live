@@ -1418,6 +1418,17 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         $prompt = "You are a knowledgeable assistant for U.S. Congressional information. ";
         $prompt .= "Answer questions about Congress, bills, representatives, senators, and government processes.\n\n";
         
+        // Add limited bill data based on question type
+        try {
+            $billData = $this->getRelevantBillDataSafe($question);
+            if (!empty($billData)) {
+                $prompt .= "Relevant Congressional Data:\n";
+                $prompt .= $billData . "\n\n";
+            }
+        } catch (\Exception $e) {
+            Log::warning('Could not load bill data safely', ['error' => $e->getMessage()]);
+        }
+        
         // Add conversation context if available
         if (!empty($context)) {
             $prompt .= "Recent conversation context:\n";
@@ -1428,11 +1439,217 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         }
         
         $prompt .= "User question: {$question}\n\n";
-        $prompt .= "Please provide a helpful, informative response about congressional processes, legislation, ";
-        $prompt .= "or government structure. Use your general knowledge about how Congress works. ";
-        $prompt .= "If you need specific current data, suggest checking Congress.gov for the most current information.";
+        $prompt .= "Please provide a helpful, informative response using the congressional data provided above. ";
+        $prompt .= "Focus on the specific bills and information shown. If you need additional current data, ";
+        $prompt .= "suggest checking Congress.gov for the most up-to-date information.";
         
         return $prompt;
+    }
+
+    /**
+     * Get relevant bill data in a memory-safe way
+     */
+    private function getRelevantBillDataSafe(string $question): string
+    {
+        $question = strtolower($question);
+        $data = "";
+        
+        try {
+            // Detect question type and get limited, relevant data
+            if (str_contains($question, 'recent') || str_contains($question, 'latest') || str_contains($question, '2024') || str_contains($question, '2025')) {
+                $data .= $this->getRecentBillsSafe();
+            } elseif (preg_match('/\b(hr|h\.r\.|s\.)\s*\d+/i', $question)) {
+                $data .= $this->getSpecificBillSafe($question);
+            } elseif (str_contains($question, 'healthcare') || str_contains($question, 'health')) {
+                $data .= $this->getBillsByTopicSafe('health');
+            } elseif (str_contains($question, 'climate') || str_contains($question, 'energy') || str_contains($question, 'environment')) {
+                $data .= $this->getBillsByTopicSafe('energy');
+            } elseif (str_contains($question, 'defense') || str_contains($question, 'military')) {
+                $data .= $this->getBillsByTopicSafe('defense');
+            } elseif (str_contains($question, 'china') || str_contains($question, 'chinese')) {
+                $data .= $this->getBillsByKeywordSafe('china');
+            } elseif (str_contains($question, 'trump') || str_contains($question, 'biden')) {
+                $data .= $this->getBillsByKeywordSafe('trump biden');
+            } elseif (str_contains($question, 'how many') || str_contains($question, 'statistics')) {
+                $data .= $this->getBillStatisticsSafe();
+            } else {
+                // For general questions, show a sample of recent bills
+                $data .= $this->getGeneralBillSampleSafe();
+            }
+            
+        } catch (\Exception $e) {
+            Log::warning('Error getting bill data', ['error' => $e->getMessage()]);
+            return "- Database temporarily unavailable, using general knowledge";
+        }
+        
+        return $data;
+    }
+
+    /**
+     * Get recent bills safely with limits
+     */
+    private function getRecentBillsSafe(): string
+    {
+        $bills = DB::table('bills')
+            ->select('type', 'number', 'title', 'introduced_date', 'policy_area')
+            ->whereNotNull('introduced_date')
+            ->orderBy('introduced_date', 'desc')
+            ->limit(10)
+            ->get();
+            
+        if ($bills->isEmpty()) {
+            return "- No recent bills found in database";
+        }
+        
+        $data = "Recent Bills (Last 10):\n";
+        foreach ($bills as $bill) {
+            $data .= "- {$bill->type} {$bill->number}: " . substr($bill->title, 0, 80) . "...\n";
+            $data .= "  Introduced: {$bill->introduced_date}" . ($bill->policy_area ? " | {$bill->policy_area}" : "") . "\n";
+        }
+        
+        return $data;
+    }
+
+    /**
+     * Get specific bill safely
+     */
+    private function getSpecificBillSafe(string $question): string
+    {
+        preg_match('/\b(hr|h\.r\.|s\.)\s*(\d+)/i', $question, $matches);
+        if (empty($matches)) return "";
+        
+        $type = strtoupper(str_replace('.', '', $matches[1]));
+        if ($type === 'HR') $type = 'HR';
+        if ($type === 'S') $type = 'S';
+        
+        $number = $matches[2];
+        
+        $bill = DB::table('bills')
+            ->select('type', 'number', 'title', 'introduced_date', 'policy_area', 'latest_action_text')
+            ->where('type', $type)
+            ->where('number', $number)
+            ->first();
+            
+        if (!$bill) {
+            return "- {$type} {$number}: Not found in database";
+        }
+        
+        $data = "Specific Bill Found:\n";
+        $data .= "- {$bill->type} {$bill->number}: {$bill->title}\n";
+        $data .= "  Introduced: {$bill->introduced_date}\n";
+        if ($bill->policy_area) $data .= "  Policy Area: {$bill->policy_area}\n";
+        if ($bill->latest_action_text) $data .= "  Latest Action: " . substr($bill->latest_action_text, 0, 100) . "...\n";
+        
+        return $data;
+    }
+
+    /**
+     * Get bills by topic safely
+     */
+    private function getBillsByTopicSafe(string $topic): string
+    {
+        $bills = DB::table('bills')
+            ->select('type', 'number', 'title', 'introduced_date', 'policy_area')
+            ->where('policy_area', 'like', "%{$topic}%")
+            ->orWhere('title', 'like', "%{$topic}%")
+            ->orderBy('introduced_date', 'desc')
+            ->limit(8)
+            ->get();
+            
+        if ($bills->isEmpty()) {
+            return "- No bills found for topic: {$topic}";
+        }
+        
+        $data = "Bills related to " . ucfirst($topic) . " (Last 8):\n";
+        foreach ($bills as $bill) {
+            $data .= "- {$bill->type} {$bill->number}: " . substr($bill->title, 0, 70) . "...\n";
+            $data .= "  Date: {$bill->introduced_date}" . ($bill->policy_area ? " | {$bill->policy_area}" : "") . "\n";
+        }
+        
+        return $data;
+    }
+
+    /**
+     * Get bills by keyword safely
+     */
+    private function getBillsByKeywordSafe(string $keywords): string
+    {
+        $bills = DB::table('bills')
+            ->select('type', 'number', 'title', 'introduced_date')
+            ->where(function($query) use ($keywords) {
+                foreach (explode(' ', $keywords) as $keyword) {
+                    $query->orWhere('title', 'like', "%{$keyword}%");
+                }
+            })
+            ->orderBy('introduced_date', 'desc')
+            ->limit(8)
+            ->get();
+            
+        if ($bills->isEmpty()) {
+            return "- No bills found containing: {$keywords}";
+        }
+        
+        $data = "Bills mentioning '{$keywords}' (Last 8):\n";
+        foreach ($bills as $bill) {
+            $data .= "- {$bill->type} {$bill->number}: " . substr($bill->title, 0, 70) . "...\n";
+            $data .= "  Date: {$bill->introduced_date}\n";
+        }
+        
+        return $data;
+    }
+
+    /**
+     * Get bill statistics safely
+     */
+    private function getBillStatisticsSafe(): string
+    {
+        $totalBills = DB::table('bills')->count();
+        $recentBills = DB::table('bills')
+            ->where('introduced_date', '>=', '2024-01-01')
+            ->count();
+            
+        $topPolicyAreas = DB::table('bills')
+            ->select('policy_area', DB::raw('count(*) as count'))
+            ->whereNotNull('policy_area')
+            ->groupBy('policy_area')
+            ->orderBy('count', 'desc')
+            ->limit(5)
+            ->get();
+            
+        $data = "Congressional Statistics:\n";
+        $data .= "- Total bills in database: {$totalBills}\n";
+        $data .= "- Bills introduced in 2024+: {$recentBills}\n";
+        $data .= "- Top policy areas:\n";
+        
+        foreach ($topPolicyAreas as $area) {
+            $data .= "  • {$area->policy_area}: {$area->count} bills\n";
+        }
+        
+        return $data;
+    }
+
+    /**
+     * Get general sample of bills safely
+     */
+    private function getGeneralBillSampleSafe(): string
+    {
+        $bills = DB::table('bills')
+            ->select('type', 'number', 'title', 'introduced_date', 'policy_area')
+            ->whereNotNull('introduced_date')
+            ->orderBy('introduced_date', 'desc')
+            ->limit(6)
+            ->get();
+            
+        if ($bills->isEmpty()) {
+            return "- No bills available in database";
+        }
+        
+        $data = "Sample Recent Bills:\n";
+        foreach ($bills as $bill) {
+            $data .= "- {$bill->type} {$bill->number}: " . substr($bill->title, 0, 60) . "...\n";
+        }
+        
+        return $data;
     }
 
     /**
