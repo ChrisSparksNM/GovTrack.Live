@@ -38,88 +38,13 @@ class CongressChatbotService
     public function askQuestion(string $question, array $context = []): array
     {
         try {
-            // Clear memory and set limits for web requests
-            if (!app()->runningInConsole()) {
-                gc_collect_cycles();
-                ini_set('memory_limit', '1024M'); // Increase to 1GB
-            }
+            // Use memory-safe fallback for all requests to avoid database memory issues
+            Log::info('Using memory-safe chatbot fallback', [
+                'question' => substr($question, 0, 100),
+                'memory_usage' => round(memory_get_usage(true) / 1024 / 1024, 2) . 'MB'
+            ]);
             
-            // Enhanced executive order query detection
-            if (preg_match('/\b(executive order|presidential action|president.*sign|EO \d+)/i', $question)) {
-                $executiveOrderResult = $this->handleExecutiveOrderQuery($question, $context);
-                if ($executiveOrderResult['success']) {
-                    return $executiveOrderResult;
-                }
-            }
-            
-            // Only use advanced features for console commands to avoid memory issues
-            // Try Claude semantic search first (preferred)
-            if ($this->claudeSemanticService) {
-                $claudeResult = $this->askQuestionWithClaudeSemantics($question, $context);
-                
-                if ($claudeResult['success'] && $claudeResult['method'] === 'claude_semantic') {
-                    return $claudeResult;
-                }
-            }
-            
-            // Fallback to OpenAI embeddings if available
-            if ($this->semanticSearchService) {
-                $semanticResult = $this->askQuestionWithSemanticSearch($question, $context);
-                
-                if ($semanticResult['success'] && $semanticResult['method'] === 'semantic_enhanced') {
-                    return $semanticResult;
-                }
-            }
-            
-            // Use enhanced intelligent query service with conversation context as fallback
-            // Use fast mode for web requests to avoid timeouts
-            $fastMode = app()->runningInConsole() ? false : true;
-            $queryResult = $this->intelligentQueryService->generateContextualQuery($question, $context, $fastMode);
-            
-            if ($queryResult['success']) {
-                // Execute queries with performance monitoring
-                $executionResults = $this->intelligentQueryService->executeQueriesWithMetrics($queryResult['queries']);
-                
-                // Generate advanced insights with statistical analysis
-                $insightsResult = $this->intelligentQueryService->generateAdvancedInsights($question, $executionResults);
-                
-                return [
-                    'success' => true,
-                    'response' => $insightsResult['insights'],
-                    'response_html' => $insightsResult['insights_html'] ?? $this->anthropicService->convertMarkdownToHtml($insightsResult['insights']),
-                    'data_sources' => $this->generateEnhancedDataSources($queryResult['queries']),
-                    'queries' => $queryResult['queries'],
-                    'query_results' => $executionResults,
-                    'analysis_metadata' => $insightsResult['analysis_metadata'] ?? [],
-                    'analysis_approach' => $queryResult['analysis_approach'] ?? '',
-                    'context_considerations' => $queryResult['context_considerations'] ?? ''
-                ];
-            } else {
-                // Fallback to original database query service
-                Log::warning('Enhanced query service failed, falling back to original', [
-                    'question' => $question,
-                    'error' => $queryResult['error'] ?? 'Unknown error'
-                ]);
-                
-                $result = $this->databaseQueryService->queryDatabase($question);
-                
-                if ($result['success']) {
-                    return [
-                        'success' => true,
-                        'response' => $result['analysis'],
-                        'response_html' => $result['analysis_html'] ?? $this->anthropicService->convertMarkdownToHtml($result['analysis']),
-                        'data_sources' => $result['data_sources'],
-                        'queries' => $result['queries'],
-                        'query_results' => $result['results']
-                    ];
-                } else {
-                    // Final fallback to old method
-                    Log::warning('All enhanced methods failed, using fallback', [
-                        'question' => $question
-                    ]);
-                    return $this->askQuestionFallback($question, $context);
-                }
-            }
+            return $this->askQuestionMemorySafe($question, $context);
             
         } catch (\Exception $e) {
             Log::error('Congress chatbot error', [
