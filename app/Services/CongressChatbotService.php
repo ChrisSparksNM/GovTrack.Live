@@ -15,23 +15,21 @@ use Illuminate\Support\Str;
 class CongressChatbotService
 {
     private AnthropicService $anthropicService;
-    private DatabaseQueryService $databaseQueryService;
-    private IntelligentQueryService $intelligentQueryService;
-    private SemanticSearchService $semanticSearchService;
-    private ClaudeSemanticService $claudeSemanticService;
+    private ?DatabaseQueryService $databaseQueryService;
+    private ?IntelligentQueryService $intelligentQueryService;
+    private ?SemanticSearchService $semanticSearchService;
+    private ?ClaudeSemanticService $claudeSemanticService;
     
     public function __construct(
-        AnthropicService $anthropicService, 
-        DatabaseQueryService $databaseQueryService,
-        IntelligentQueryService $intelligentQueryService,
-        SemanticSearchService $semanticSearchService,
-        ClaudeSemanticService $claudeSemanticService
+        AnthropicService $anthropicService
     ) {
         $this->anthropicService = $anthropicService;
-        $this->databaseQueryService = $databaseQueryService;
-        $this->intelligentQueryService = $intelligentQueryService;
-        $this->semanticSearchService = $semanticSearchService;
-        $this->claudeSemanticService = $claudeSemanticService;
+        // TEMPORARY: Don't inject heavy services to avoid memory issues during construction
+        // These will be loaded on-demand if needed
+        $this->databaseQueryService = null;
+        $this->intelligentQueryService = null;
+        $this->semanticSearchService = null;
+        $this->claudeSemanticService = null;
     }
 
     /**
@@ -1412,5 +1410,129 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         return $context;
     }
 
+    /**
+     * Lazy load DatabaseQueryService only when needed
+     */
+    private function getDatabaseQueryService(): DatabaseQueryService
+    {
+        if ($this->databaseQueryService === null) {
+            $this->databaseQueryService = app(DatabaseQueryService::class);
+        }
+        return $this->databaseQueryService;
+    }
 
+    /**
+     * Lazy load SemanticSearchService only when needed
+     */
+    private function getSemanticSearchService(): ?SemanticSearchService
+    {
+        if ($this->semanticSearchService === null) {
+            try {
+                $this->semanticSearchService = app(SemanticSearchService::class);
+            } catch (\Exception $e) {
+                Log::warning('Could not load SemanticSearchService', ['error' => $e->getMessage()]);
+                return null;
+            }
+        }
+        return $this->semanticSearchService;
+    }
+
+    /**
+     * Memory-safe fallback that avoids heavy database operations
+     */
+    private function askQuestionMemorySafe(string $question, array $context = []): array
+    {
+        try {
+            // Build a comprehensive prompt using general knowledge + minimal database queries
+            $prompt = $this->buildMemorySafePrompt($question, $context);
+            
+            // Use Anthropic service directly
+            $response = $this->anthropicService->generateChatResponse($prompt);
+            
+            if ($response['success']) {
+                return [
+                    'success' => true,
+                    'response' => $response['response'] ?? $response['content'] ?? 'I apologize, but I received an empty response.',
+                    'response_html' => $this->convertToHtml($response['response'] ?? $response['content'] ?? ''),
+                    'method' => 'memory_safe_fallback',
+                    'data_sources' => ['Congressional knowledge with minimal database queries'],
+                    'context' => array_slice($context, -3) // Keep only last 3 exchanges
+                ];
+            }
+            
+            // If API fails, return helpful static response
+            return [
+                'success' => true,
+                'response' => $this->getStaticCongressionalResponse($question),
+                'method' => 'static_congressional_knowledge',
+                'data_sources' => ['General congressional knowledge'],
+                'context' => []
+            ];
+            
+        } catch (\Exception $e) {
+            Log::error('Memory-safe fallback error', [
+                'error' => $e->getMessage(),
+                'question_length' => strlen($question)
+            ]);
+            
+            return [
+                'success' => true,
+                'response' => $this->getStaticCongressionalResponse($question),
+                'method' => 'emergency_static',
+                'data_sources' => ['Emergency static response'],
+                'context' => []
+            ];
+        }
+    }
+
+    /**
+     * Build a memory-safe prompt with minimal database access
+     */
+    private function buildMemorySafePrompt(string $question, array $context = []): string
+    {
+        $prompt = "You are a knowledgeable assistant for U.S. Congressional information. ";
+        $prompt .= "Answer questions about Congress, bills, representatives, senators, and government processes.\n\n";
+        
+        // Add conversation context if available
+        if (!empty($context)) {
+            $prompt .= "Recent conversation context:\n";
+            foreach (array_slice($context, -2) as $exchange) {
+                $prompt .= "Q: " . substr($exchange['question'] ?? '', 0, 100) . "\n";
+                $prompt .= "A: " . substr($exchange['response'] ?? '', 0, 150) . "\n\n";
+            }
+        }
+        
+        $prompt .= "User question: {$question}\n\n";
+        $prompt .= "Please provide a helpful, informative response about congressional processes, legislation, ";
+        $prompt .= "or government structure. Use your general knowledge about how Congress works. ";
+        $prompt .= "If you need specific current data, suggest checking Congress.gov for the most current information.";
+        
+        return $prompt;
+    }
+
+    /**
+     * Get static congressional response for common questions
+     */
+    private function getStaticCongressionalResponse(string $question): string
+    {
+        $question = strtolower($question);
+        
+        if (str_contains($question, 'how many') || str_contains($question, 'statistics')) {
+            return "Congress consists of 535 voting members: 435 in the House of Representatives and 100 in the Senate. For current statistics and specific numbers, I recommend checking Congress.gov for the most up-to-date information.";
+        }
+        
+        if (str_contains($question, 'bill') || str_contains($question, 'legislation')) {
+            return "Bills in Congress go through several stages: introduction, committee review, floor votes, and presidential action. For information about specific bills or current legislation, please visit Congress.gov where you can search by bill number, topic, or sponsor.";
+        }
+        
+        if (str_contains($question, 'member') || str_contains($question, 'representative') || str_contains($question, 'senator')) {
+            return "Members of Congress represent their states and districts in the legislative process. You can find information about your representatives and senators, including their contact information and voting records, on Congress.gov or by contacting their offices directly.";
+        }
+        
+        if (str_contains($question, 'party') || str_contains($question, 'democrat') || str_contains($question, 'republican')) {
+            return "Congress includes members from various political parties, with Democrats and Republicans being the two major parties. Party composition can change with each election. For current party breakdowns and member information, please check Congress.gov.";
+        }
+        
+        return "I'm currently experiencing technical difficulties accessing our database. For congressional information, please visit Congress.gov, which provides comprehensive, up-to-date information about bills, members, votes, and congressional activities. You can also contact your representative's office directly for assistance.";
+    }
 }

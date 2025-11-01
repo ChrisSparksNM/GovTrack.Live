@@ -1,9 +1,7 @@
 <?php
 
-require_once 'bootstrap/app.php';
-
 try {
-    $app = require_once 'bootstrap/app.php';
+    $app = require_once __DIR__ . '/bootstrap/app.php';
     $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 } catch (Exception $e) {
     echo "Bootstrap error: " . $e->getMessage() . PHP_EOL;
