@@ -364,7 +364,7 @@ class BillController extends Controller
                 'ai_summary_html' => $result['summary_html'] ?? null,
                 'ai_summary_generated_at' => now(),
                 'ai_summary_metadata' => [
-                    'model' => 'claude-3-5-sonnet',
+                    'model' => 'claude-haiku-4-5-20251001',
                     'input_tokens' => $result['usage']['input_tokens'] ?? 0,
                     'output_tokens' => $result['usage']['output_tokens'] ?? 0,
                     'generated_at' => now()->toISOString()

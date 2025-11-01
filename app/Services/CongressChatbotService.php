@@ -40,6 +40,11 @@ class CongressChatbotService
     public function askQuestion(string $question, array $context = []): array
     {
         try {
+            // Clear memory and set limits for web requests
+            if (!app()->runningInConsole()) {
+                gc_collect_cycles();
+                ini_set('memory_limit', '512M');
+            }
             // Enhanced executive order query detection
             if (preg_match('/\b(executive order|presidential action|president.*sign|EO \d+)/i', $question)) {
                 $executiveOrderResult = $this->handleExecutiveOrderQuery($question, $context);
