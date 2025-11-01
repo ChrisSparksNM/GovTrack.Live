@@ -34,7 +34,7 @@ class AnthropicService
             // Log the request for debugging
             Log::info('Making Anthropic API request', [
                 'url' => $this->baseUrl . '/messages',
-                'model' => 'claude-3-5-sonnet-20250106',
+                'model' => 'claude-3-5-sonnet',
                 'api_key_length' => strlen($this->apiKey),
                 'prompt_length' => strlen($prompt)
             ]);
@@ -44,7 +44,7 @@ class AnthropicService
                 'x-api-key' => $this->apiKey,
                 'anthropic-version' => '2023-06-01'
             ])->timeout(120)->post($this->baseUrl . '/messages', [
-                'model' => 'claude-3-5-sonnet-20250106',
+                'model' => 'claude-3-5-sonnet',
                 'max_tokens' => 4000,
                 'messages' => [
                     [
@@ -152,7 +152,7 @@ Please keep the summary informative but accessible to the general public, avoidi
             // Log the request for debugging
             Log::info('Making Anthropic API request for executive order', [
                 'url' => $this->baseUrl . '/messages',
-                'model' => 'claude-3-5-sonnet-20250106',
+                'model' => 'claude-3-5-sonnet',
                 'api_key_length' => strlen($this->apiKey),
                 'prompt_length' => strlen($prompt)
             ]);
@@ -162,7 +162,7 @@ Please keep the summary informative but accessible to the general public, avoidi
                 'x-api-key' => $this->apiKey,
                 'anthropic-version' => '2023-06-01'
             ])->timeout(120)->post($this->baseUrl . '/messages', [
-                'model' => 'claude-3-5-sonnet-20250106',
+                'model' => 'claude-3-5-sonnet',
                 'max_tokens' => 4000,
                 'messages' => [
                     [
@@ -326,7 +326,7 @@ Focus on the main purpose and key changes this bill would make. Keep it under 10
                 'x-api-key' => $this->apiKey,
                 'anthropic-version' => '2023-06-01'
             ])->timeout(45)->post($this->baseUrl . '/messages', [
-                'model' => 'claude-3-5-sonnet-20250106',
+                'model' => 'claude-3-5-sonnet',
                 'max_tokens' => 2000, // Reduced for faster responses
                 'messages' => [
                     [
