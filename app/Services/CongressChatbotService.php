@@ -40,22 +40,10 @@ class CongressChatbotService
     public function askQuestion(string $question, array $context = []): array
     {
         try {
-            // TEMPORARY: Use ultra-minimal fallback for ALL requests to avoid memory issues
-            // This bypasses all database operations until memory issue is resolved
-            Log::info('Using ultra-minimal chatbot fallback to avoid memory exhaustion', [
-                'question' => substr($question, 0, 100),
-                'is_console' => app()->runningInConsole()
-            ]);
-            return $this->askQuestionSimpleFallback($question, $context);
-            
             // Clear memory and set limits for web requests
             if (!app()->runningInConsole()) {
                 gc_collect_cycles();
                 ini_set('memory_limit', '1024M'); // Increase to 1GB
-                
-                // For web requests, use simple fallback to avoid memory issues
-                Log::info('Using simple chatbot fallback for web request', ['question' => substr($question, 0, 100)]);
-                return $this->askQuestionSimpleFallback($question, $context);
             }
             
             // Enhanced executive order query detection
@@ -1424,59 +1412,5 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         return $context;
     }
 
-    /**
-     * Ultra-minimal fallback method that completely avoids database operations
-     */
-    private function askQuestionSimpleFallback(string $question, array $context = []): array
-    {
-        try {
-            // Build a basic prompt with general congressional knowledge
-            $prompt = "You are a knowledgeable assistant for U.S. Congressional information. ";
-            $prompt .= "Answer questions about Congress, bills, representatives, senators, and government processes using your general knowledge. ";
-            $prompt .= "Be helpful and informative, but acknowledge when you don't have specific current data.\n\n";
-            $prompt .= "User question: {$question}\n\n";
-            $prompt .= "Provide a helpful response based on your knowledge of how Congress works, typical legislative processes, ";
-            $prompt .= "and general information about the U.S. government structure. If the user needs specific current data ";
-            $prompt .= "(like exact vote counts, specific bill status, or current member information), ";
-            $prompt .= "let them know they may need to check official sources like Congress.gov for the most up-to-date information.";
-            
-            // Make a direct API call without any database dependencies
-            $apiResponse = $this->anthropicService->generateChatResponse($prompt);
-            
-            if ($apiResponse['success']) {
-                return [
-                    'success' => true,
-                    'response' => $apiResponse['response'] ?? $apiResponse['content'] ?? 'I apologize, but I received an empty response.',
-                    'method' => 'ultra_minimal_fallback',
-                    'data_sources' => ['General congressional knowledge - no database queries'],
-                    'context' => [] // Clear context to save memory
-                ];
-            }
-            
-            // If API call fails, return a static helpful response
-            return [
-                'success' => true,
-                'response' => "I'm currently experiencing technical difficulties accessing our database. However, I can still help with general questions about how Congress works, the legislative process, or government structure. For specific current information about bills, votes, or member details, I recommend checking Congress.gov or contacting your representative's office directly.",
-                'method' => 'static_fallback',
-                'data_sources' => ['Static response - system in maintenance mode'],
-                'context' => []
-            ];
-            
-        } catch (\Exception $e) {
-            // Log error but don't include sensitive details in response
-            Log::error('Ultra minimal fallback error', [
-                'error' => $e->getMessage(),
-                'question_length' => strlen($question)
-            ]);
-            
-            // Return a completely static response as last resort
-            return [
-                'success' => true,
-                'response' => "I'm currently experiencing technical difficulties. For congressional information, please visit Congress.gov, contact your representative's office, or try again later. I apologize for the inconvenience.",
-                'method' => 'emergency_static',
-                'data_sources' => ['Emergency static response'],
-                'context' => []
-            ];
-        }
-    }
+
 }
