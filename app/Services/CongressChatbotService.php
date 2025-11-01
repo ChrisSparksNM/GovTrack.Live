@@ -38,25 +38,49 @@ class CongressChatbotService
     public function askQuestion(string $question, array $context = []): array
     {
         try {
-            // Use memory-safe fallback for all requests to avoid database memory issues
-            Log::info('Using memory-safe chatbot fallback', [
+            // Memory management
+            gc_collect_cycles();
+            $startMemory = memory_get_usage(true);
+            
+            Log::info('Processing chatbot question with full database access', [
                 'question' => substr($question, 0, 100),
-                'memory_usage' => round(memory_get_usage(true) / 1024 / 1024, 2) . 'MB'
+                'start_memory' => round($startMemory / 1024 / 1024, 2) . 'MB'
             ]);
             
+            // Try memory-optimized database approach first
+            $result = $this->askQuestionWithOptimizedDatabase($question, $context);
+            
+            if ($result['success']) {
+                $endMemory = memory_get_usage(true);
+                Log::info('Chatbot completed successfully', [
+                    'method' => $result['method'] ?? 'optimized_database',
+                    'memory_used' => round(($endMemory - $startMemory) / 1024 / 1024, 2) . 'MB',
+                    'peak_memory' => round(memory_get_peak_usage(true) / 1024 / 1024, 2) . 'MB'
+                ]);
+                return $result;
+            }
+            
+            // Fallback to memory-safe approach if optimized fails
+            Log::warning('Optimized database approach failed, using memory-safe fallback');
             return $this->askQuestionMemorySafe($question, $context);
             
         } catch (\Exception $e) {
             Log::error('Congress chatbot error', [
                 'question' => $question,
                 'error' => $e->getMessage(),
+                'memory_usage' => round(memory_get_usage(true) / 1024 / 1024, 2) . 'MB',
                 'trace' => $e->getTraceAsString()
             ]);
             
-            return [
-                'success' => false,
-                'error' => 'Failed to process question: ' . $e->getMessage()
-            ];
+            // Try memory-safe fallback on any error
+            try {
+                return $this->askQuestionMemorySafe($question, $context);
+            } catch (\Exception $fallbackError) {
+                return [
+                    'success' => false,
+                    'error' => 'Failed to process question: ' . $e->getMessage()
+                ];
+            }
         }
     }
 
@@ -1333,6 +1357,510 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         }
         
         return $context;
+    }
+
+    /**
+     * Memory-optimized database approach with full access
+     */
+    private function askQuestionWithOptimizedDatabase(string $question, array $context = []): array
+    {
+        try {
+            // Analyze question to determine optimal data retrieval strategy
+            $queryPlan = $this->analyzeQuestionForOptimalQuery($question);
+            
+            // Get relevant data using memory-efficient queries
+            $relevantData = $this->getRelevantDataOptimized($question, $queryPlan);
+            
+            // Build comprehensive prompt with actual data
+            $prompt = $this->buildOptimizedPrompt($question, $relevantData, $context);
+            
+            // Get AI response
+            $response = $this->anthropicService->generateChatResponse($prompt);
+            
+            if ($response['success']) {
+                return [
+                    'success' => true,
+                    'response' => $response['response'] ?? $response['content'],
+                    'response_html' => $this->convertToHtml($response['response'] ?? $response['content']),
+                    'method' => 'optimized_database_full_access',
+                    'data_sources' => $relevantData['sources'] ?? ['Congressional database with memory optimization'],
+                    'query_plan' => $queryPlan,
+                    'data_summary' => $relevantData['summary'] ?? [],
+                    'context' => array_slice($context, -3) // Keep limited context
+                ];
+            }
+            
+            return ['success' => false, 'error' => 'AI response failed'];
+            
+        } catch (\Exception $e) {
+            Log::error('Optimized database query failed', [
+                'error' => $e->getMessage(),
+                'question' => substr($question, 0, 100)
+            ]);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Analyze question to determine optimal query strategy
+     */
+    private function analyzeQuestionForOptimalQuery(string $question): array
+    {
+        $question = strtolower($question);
+        $plan = [
+            'type' => 'general',
+            'entities' => [],
+            'time_filter' => null,
+            'limit' => 20,
+            'priority' => 'recent'
+        ];
+        
+        // Detect specific bill references
+        if (preg_match('/\b(hr|h\.r\.|s\.)\s*(\d+)/i', $question, $matches)) {
+            $plan['type'] = 'specific_bill';
+            $plan['entities'][] = ['type' => 'bill', 'reference' => $matches[0]];
+            $plan['limit'] = 5; // Small limit for specific queries
+        }
+        
+        // Detect member queries
+        if (preg_match('/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/', $question, $matches)) {
+            $plan['type'] = 'member_focused';
+            $plan['entities'][] = ['type' => 'member', 'name' => $matches[0]];
+            $plan['limit'] = 15;
+        }
+        
+        // Detect topic-based queries
+        $topics = ['healthcare', 'health', 'climate', 'energy', 'defense', 'military', 'education', 'immigration', 'tax'];
+        foreach ($topics as $topic) {
+            if (str_contains($question, $topic)) {
+                $plan['type'] = 'topic_based';
+                $plan['entities'][] = ['type' => 'topic', 'value' => $topic];
+                $plan['limit'] = 25;
+                break;
+            }
+        }
+        
+        // Detect time-based filters
+        if (str_contains($question, 'recent') || str_contains($question, '2024') || str_contains($question, '2025')) {
+            $plan['time_filter'] = '2024-01-01';
+            $plan['priority'] = 'recent';
+        }
+        
+        // Detect statistical queries
+        if (str_contains($question, 'how many') || str_contains($question, 'statistics') || str_contains($question, 'count')) {
+            $plan['type'] = 'statistical';
+            $plan['limit'] = 50; // Can handle more for stats
+        }
+        
+        // Detect state-based queries
+        $states = ['california', 'texas', 'florida', 'new york', 'pennsylvania'];
+        foreach ($states as $state) {
+            if (str_contains($question, $state)) {
+                $plan['type'] = 'state_based';
+                $plan['entities'][] = ['type' => 'state', 'value' => $state];
+                $plan['limit'] = 20;
+                break;
+            }
+        }
+        
+        return $plan;
+    }
+
+    /**
+     * Get relevant data using memory-optimized queries
+     */
+    private function getRelevantDataOptimized(string $question, array $queryPlan): array
+    {
+        $data = [
+            'bills' => [],
+            'members' => [],
+            'statistics' => [],
+            'sources' => [],
+            'summary' => []
+        ];
+        
+        try {
+            switch ($queryPlan['type']) {
+                case 'specific_bill':
+                    $data = array_merge($data, $this->getSpecificBillDataOptimized($question, $queryPlan));
+                    break;
+                    
+                case 'member_focused':
+                    $data = array_merge($data, $this->getMemberDataOptimized($question, $queryPlan));
+                    break;
+                    
+                case 'topic_based':
+                    $data = array_merge($data, $this->getTopicDataOptimized($question, $queryPlan));
+                    break;
+                    
+                case 'statistical':
+                    $data = array_merge($data, $this->getStatisticalDataOptimized($question, $queryPlan));
+                    break;
+                    
+                case 'state_based':
+                    $data = array_merge($data, $this->getStateDataOptimized($question, $queryPlan));
+                    break;
+                    
+                default:
+                    $data = array_merge($data, $this->getGeneralDataOptimized($question, $queryPlan));
+            }
+            
+            // Add memory usage to summary
+            $data['summary']['memory_efficient'] = true;
+            $data['summary']['query_type'] = $queryPlan['type'];
+            $data['summary']['records_loaded'] = count($data['bills']) + count($data['members']);
+            
+        } catch (\Exception $e) {
+            Log::error('Error in optimized data retrieval', ['error' => $e->getMessage()]);
+            $data['sources'][] = 'Error retrieving data: ' . $e->getMessage();
+        }
+        
+        return $data;
+    }
+
+    /**
+     * Get member data with memory optimization
+     */
+    private function getMemberDataOptimized(string $question, array $queryPlan): array
+    {
+        $memberName = $queryPlan['entities'][0]['name'] ?? '';
+        $nameParts = explode(' ', $memberName);
+        
+        if (count($nameParts) >= 2) {
+            $firstName = $nameParts[0];
+            $lastName = $nameParts[1];
+            
+            $member = DB::table('members')
+                ->select('id', 'first_name', 'last_name', 'full_name', 'party_abbreviation', 
+                        'party_name', 'state', 'district', 'chamber', 'current')
+                ->where('first_name', 'like', "%{$firstName}%")
+                ->where('last_name', 'like', "%{$lastName}%")
+                ->where('current', true)
+                ->first();
+                
+            if ($member) {
+                // Get bills sponsored by this member (if we have that data)
+                $relatedBills = DB::table('bills')
+                    ->select('type', 'number', 'title', 'introduced_date', 'policy_area')
+                    ->where('title', 'like', "%{$member->last_name}%")
+                    ->orderBy('introduced_date', 'desc')
+                    ->limit(10)
+                    ->get()
+                    ->toArray();
+                    
+                return [
+                    'members' => [$member],
+                    'bills' => $relatedBills,
+                    'sources' => ["Member profile: {$member->full_name}", "Related legislation"],
+                    'summary' => ['member_found' => $member->full_name, 'related_bills' => count($relatedBills)]
+                ];
+            }
+        }
+        
+        // Fallback: get members from mentioned state or party
+        $members = DB::table('members')
+            ->select('first_name', 'last_name', 'full_name', 'party_abbreviation', 'state', 'chamber')
+            ->where('current', true)
+            ->limit(15)
+            ->get()
+            ->toArray();
+            
+        return [
+            'members' => $members,
+            'sources' => ['Current members of Congress'],
+            'summary' => ['type' => 'member_search', 'members_found' => count($members)]
+        ];
+    }
+
+    /**
+     * Get state-based data with memory optimization
+     */
+    private function getStateDataOptimized(string $question, array $queryPlan): array
+    {
+        $state = $queryPlan['entities'][0]['value'] ?? '';
+        $stateCode = $this->getStateCode($state);
+        
+        if ($stateCode) {
+            // Get members from this state
+            $stateMembers = DB::table('members')
+                ->select('first_name', 'last_name', 'full_name', 'party_abbreviation', 'chamber', 'district')
+                ->where('state', $stateCode)
+                ->where('current', true)
+                ->orderBy('chamber')
+                ->orderBy('district')
+                ->get()
+                ->toArray();
+                
+            // Get bills that might be related to this state
+            $stateBills = DB::table('bills')
+                ->select('type', 'number', 'title', 'introduced_date', 'policy_area')
+                ->where('title', 'like', "%{$state}%")
+                ->orderBy('introduced_date', 'desc')
+                ->limit(10)
+                ->get()
+                ->toArray();
+                
+            return [
+                'members' => $stateMembers,
+                'bills' => $stateBills,
+                'sources' => ["Representatives from {$state}", "Bills mentioning {$state}"],
+                'summary' => ['state' => $state, 'members_count' => count($stateMembers), 'bills_count' => count($stateBills)]
+            ];
+        }
+        
+        return ['sources' => ["State '{$state}' not found"]];
+    }
+
+    /**
+     * Helper method to get state code from state name
+     */
+    private function getStateCode(string $stateName): ?string
+    {
+        $states = [
+            'california' => 'CA', 'texas' => 'TX', 'florida' => 'FL', 'new york' => 'NY',
+            'pennsylvania' => 'PA', 'illinois' => 'IL', 'ohio' => 'OH', 'georgia' => 'GA',
+            'north carolina' => 'NC', 'michigan' => 'MI', 'new jersey' => 'NJ', 'virginia' => 'VA',
+            'washington' => 'WA', 'arizona' => 'AZ', 'massachusetts' => 'MA', 'tennessee' => 'TN',
+            'indiana' => 'IN', 'maryland' => 'MD', 'missouri' => 'MO', 'wisconsin' => 'WI'
+        ];
+        
+        return $states[strtolower($stateName)] ?? null;
+    }
+
+    /**
+     * Get specific bill data with memory optimization
+     */
+    private function getSpecificBillDataOptimized(string $question, array $queryPlan): array
+    {
+        preg_match('/\b(hr|h\.r\.|s\.)\s*(\d+)/i', $question, $matches);
+        if (empty($matches)) return ['sources' => ['No specific bill found']];
+        
+        $type = strtoupper(str_replace('.', '', $matches[1]));
+        $type = ($type === 'HR') ? 'HR' : 'S';
+        $number = $matches[2];
+        
+        // Get bill with only essential fields to save memory
+        $bill = DB::table('bills')
+            ->select('id', 'type', 'number', 'title', 'short_title', 'policy_area', 
+                    'introduced_date', 'latest_action_date', 'latest_action_text')
+            ->where('type', $type)
+            ->where('number', $number)
+            ->first();
+            
+        if (!$bill) {
+            return ['sources' => ["{$type} {$number} not found in database"]];
+        }
+        
+        // Get related bills (same policy area) with limit
+        $relatedBills = [];
+        if ($bill->policy_area) {
+            $relatedBills = DB::table('bills')
+                ->select('type', 'number', 'title', 'introduced_date')
+                ->where('policy_area', $bill->policy_area)
+                ->where('id', '!=', $bill->id)
+                ->orderBy('introduced_date', 'desc')
+                ->limit(5)
+                ->get()
+                ->toArray();
+        }
+        
+        return [
+            'bills' => array_merge([$bill], $relatedBills),
+            'sources' => ["Specific bill: {$type} {$number}", "Related bills in {$bill->policy_area}"],
+            'summary' => ['specific_bill' => "{$type} {$number}", 'related_count' => count($relatedBills)]
+        ];
+    }
+
+    /**
+     * Get topic-based data with memory optimization
+     */
+    private function getTopicDataOptimized(string $question, array $queryPlan): array
+    {
+        $topic = $queryPlan['entities'][0]['value'] ?? 'general';
+        $limit = $queryPlan['limit'];
+        
+        // Use chunked queries to avoid memory issues
+        $bills = DB::table('bills')
+            ->select('type', 'number', 'title', 'policy_area', 'introduced_date', 'latest_action_date')
+            ->where(function($query) use ($topic) {
+                $query->where('policy_area', 'like', "%{$topic}%")
+                      ->orWhere('title', 'like', "%{$topic}%");
+            })
+            ->when($queryPlan['time_filter'], function($query, $timeFilter) {
+                return $query->where('introduced_date', '>=', $timeFilter);
+            })
+            ->orderBy('introduced_date', 'desc')
+            ->limit($limit)
+            ->get()
+            ->toArray();
+            
+        // Get topic statistics
+        $topicStats = DB::table('bills')
+            ->selectRaw('COUNT(*) as total_bills, 
+                        COUNT(CASE WHEN introduced_date >= ? THEN 1 END) as recent_bills',
+                        [$queryPlan['time_filter'] ?? '2024-01-01'])
+            ->where(function($query) use ($topic) {
+                $query->where('policy_area', 'like', "%{$topic}%")
+                      ->orWhere('title', 'like', "%{$topic}%");
+            })
+            ->first();
+            
+        return [
+            'bills' => $bills,
+            'statistics' => ['topic_stats' => $topicStats],
+            'sources' => ["Bills related to {$topic}", "Topic statistics"],
+            'summary' => ['topic' => $topic, 'bills_found' => count($bills)]
+        ];
+    }
+
+    /**
+     * Get statistical data with memory optimization
+     */
+    private function getStatisticalDataOptimized(string $question, array $queryPlan): array
+    {
+        // Use aggregate queries instead of loading all records
+        $stats = [
+            'total_bills' => DB::table('bills')->count(),
+            'recent_bills' => DB::table('bills')->where('introduced_date', '>=', '2024-01-01')->count(),
+            'by_chamber' => DB::table('bills')
+                ->select('origin_chamber', DB::raw('COUNT(*) as count'))
+                ->groupBy('origin_chamber')
+                ->get()
+                ->toArray(),
+            'by_policy_area' => DB::table('bills')
+                ->select('policy_area', DB::raw('COUNT(*) as count'))
+                ->whereNotNull('policy_area')
+                ->groupBy('policy_area')
+                ->orderBy('count', 'desc')
+                ->limit(10)
+                ->get()
+                ->toArray(),
+            'by_type' => DB::table('bills')
+                ->select('type', DB::raw('COUNT(*) as count'))
+                ->groupBy('type')
+                ->orderBy('count', 'desc')
+                ->get()
+                ->toArray()
+        ];
+        
+        // Get member statistics
+        $memberStats = [
+            'total_members' => DB::table('members')->where('current', true)->count(),
+            'by_party' => DB::table('members')
+                ->select('party_abbreviation', DB::raw('COUNT(*) as count'))
+                ->where('current', true)
+                ->groupBy('party_abbreviation')
+                ->get()
+                ->toArray(),
+            'by_chamber' => DB::table('members')
+                ->select('chamber', DB::raw('COUNT(*) as count'))
+                ->where('current', true)
+                ->groupBy('chamber')
+                ->get()
+                ->toArray()
+        ];
+        
+        return [
+            'statistics' => array_merge($stats, ['members' => $memberStats]),
+            'sources' => ['Congressional statistics', 'Member demographics'],
+            'summary' => ['type' => 'comprehensive_statistics']
+        ];
+    }
+
+    /**
+     * Get general data with memory optimization
+     */
+    private function getGeneralDataOptimized(string $question, array $queryPlan): array
+    {
+        $limit = $queryPlan['limit'];
+        
+        // Get recent bills with essential fields only
+        $recentBills = DB::table('bills')
+            ->select('type', 'number', 'title', 'policy_area', 'introduced_date')
+            ->whereNotNull('introduced_date')
+            ->orderBy('introduced_date', 'desc')
+            ->limit($limit)
+            ->get()
+            ->toArray();
+            
+        // Get basic statistics
+        $basicStats = [
+            'total_bills' => DB::table('bills')->count(),
+            'recent_bills' => DB::table('bills')->where('introduced_date', '>=', '2024-01-01')->count(),
+            'top_policy_areas' => DB::table('bills')
+                ->select('policy_area', DB::raw('COUNT(*) as count'))
+                ->whereNotNull('policy_area')
+                ->groupBy('policy_area')
+                ->orderBy('count', 'desc')
+                ->limit(5)
+                ->get()
+                ->toArray()
+        ];
+        
+        return [
+            'bills' => $recentBills,
+            'statistics' => $basicStats,
+            'sources' => ['Recent congressional bills', 'Basic statistics'],
+            'summary' => ['type' => 'general_overview', 'bills_loaded' => count($recentBills)]
+        ];
+    }
+
+    /**
+     * Build optimized prompt with comprehensive data
+     */
+    private function buildOptimizedPrompt(string $question, array $data, array $context): string
+    {
+        $prompt = "You are an expert congressional analyst with access to comprehensive legislative data. ";
+        $prompt .= "Provide detailed, accurate responses using the specific data provided below.\n\n";
+        
+        // Add bill data
+        if (!empty($data['bills'])) {
+            $prompt .= "CONGRESSIONAL BILLS DATA:\n";
+            foreach (array_slice($data['bills'], 0, 20) as $bill) { // Limit to prevent prompt overflow
+                $bill = (array) $bill;
+                $prompt .= "- {$bill['type']} {$bill['number']}: {$bill['title']}\n";
+                if (isset($bill['introduced_date'])) $prompt .= "  Introduced: {$bill['introduced_date']}\n";
+                if (isset($bill['policy_area'])) $prompt .= "  Policy Area: {$bill['policy_area']}\n";
+                if (isset($bill['latest_action_text'])) $prompt .= "  Latest Action: " . substr($bill['latest_action_text'], 0, 100) . "\n";
+                $prompt .= "\n";
+            }
+        }
+        
+        // Add statistics
+        if (!empty($data['statistics'])) {
+            $prompt .= "CONGRESSIONAL STATISTICS:\n";
+            foreach ($data['statistics'] as $key => $value) {
+                if (is_array($value)) {
+                    $prompt .= ucfirst(str_replace('_', ' ', $key)) . ":\n";
+                    foreach (array_slice($value, 0, 10) as $item) { // Limit items
+                        $item = (array) $item;
+                        if (isset($item['count'])) {
+                            $label = $item['policy_area'] ?? $item['party_abbreviation'] ?? $item['chamber'] ?? $item['type'] ?? 'Unknown';
+                            $prompt .= "  - {$label}: {$item['count']}\n";
+                        }
+                    }
+                } else {
+                    $prompt .= "- " . ucfirst(str_replace('_', ' ', $key)) . ": {$value}\n";
+                }
+            }
+            $prompt .= "\n";
+        }
+        
+        // Add conversation context
+        if (!empty($context)) {
+            $prompt .= "CONVERSATION CONTEXT:\n";
+            foreach (array_slice($context, -2) as $exchange) {
+                $prompt .= "Q: " . substr($exchange['question'] ?? '', 0, 100) . "\n";
+                $prompt .= "A: " . substr($exchange['response'] ?? '', 0, 150) . "...\n\n";
+            }
+        }
+        
+        $prompt .= "USER QUESTION: {$question}\n\n";
+        $prompt .= "Please provide a comprehensive, detailed response using the congressional data above. ";
+        $prompt .= "Include specific bill numbers, statistics, and relevant details from the data. ";
+        $prompt .= "Be thorough and analytical in your response.";
+        
+        return $prompt;
     }
 
     /**
