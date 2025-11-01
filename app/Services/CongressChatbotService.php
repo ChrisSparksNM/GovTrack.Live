@@ -1371,6 +1371,15 @@ Please provide a helpful, well-formatted response combining both Claude semantic
             // Get relevant data using memory-efficient queries
             $relevantData = $this->getRelevantDataOptimized($question, $queryPlan);
             
+            // Validate we have meaningful data
+            $hasData = !empty($relevantData['bills']) || !empty($relevantData['members']) || !empty($relevantData['statistics']);
+            
+            if (!$hasData) {
+                Log::warning('No meaningful data retrieved for question', ['question' => substr($question, 0, 100)]);
+                // Force some basic data
+                $relevantData = array_merge($relevantData, $this->getGeneralDataOptimized($question, $queryPlan));
+            }
+            
             // Build comprehensive prompt with actual data
             $prompt = $this->buildOptimizedPrompt($question, $relevantData, $context);
             
@@ -1810,45 +1819,72 @@ Please provide a helpful, well-formatted response combining both Claude semantic
      */
     private function buildOptimizedPrompt(string $question, array $data, array $context): string
     {
-        $prompt = "You are an expert congressional analyst with access to comprehensive legislative data. ";
-        $prompt .= "Provide detailed, accurate responses using the specific data provided below.\n\n";
+        $prompt = "You are a congressional information assistant with DIRECT ACCESS to the official U.S. Congressional database. ";
+        $prompt .= "The data below is REAL, CURRENT congressional information retrieved from the live database. ";
+        $prompt .= "You HAVE this data and should use it confidently to answer questions.\n\n";
+        
+        $prompt .= "IMPORTANT: You have access to current congressional data. Do NOT say you don't have access to current data. ";
+        $prompt .= "The information below is from the official congressional database and is current and accurate.\n\n";
         
         // Add bill data
         if (!empty($data['bills'])) {
-            $prompt .= "CONGRESSIONAL BILLS DATA:\n";
-            foreach (array_slice($data['bills'], 0, 20) as $bill) { // Limit to prevent prompt overflow
+            $billCount = count($data['bills']);
+            $prompt .= "CURRENT CONGRESSIONAL BILLS (Retrieved from database - {$billCount} bills):\n";
+            foreach (array_slice($data['bills'], 0, 20) as $bill) {
                 $bill = (array) $bill;
-                $prompt .= "- {$bill['type']} {$bill['number']}: {$bill['title']}\n";
-                if (isset($bill['introduced_date'])) $prompt .= "  Introduced: {$bill['introduced_date']}\n";
-                if (isset($bill['policy_area'])) $prompt .= "  Policy Area: {$bill['policy_area']}\n";
-                if (isset($bill['latest_action_text'])) $prompt .= "  Latest Action: " . substr($bill['latest_action_text'], 0, 100) . "\n";
+                $prompt .= "• {$bill['type']} {$bill['number']}: {$bill['title']}\n";
+                if (isset($bill['introduced_date'])) $prompt .= "  📅 Introduced: {$bill['introduced_date']}\n";
+                if (isset($bill['policy_area'])) $prompt .= "  🏛️ Policy Area: {$bill['policy_area']}\n";
+                if (isset($bill['latest_action_text'])) $prompt .= "  ⚡ Latest Action: " . substr($bill['latest_action_text'], 0, 100) . "\n";
                 $prompt .= "\n";
             }
         }
         
+        // Add member data
+        if (!empty($data['members'])) {
+            $memberCount = count($data['members']);
+            $prompt .= "CURRENT CONGRESS MEMBERS (Retrieved from database - {$memberCount} members):\n";
+            foreach (array_slice($data['members'], 0, 15) as $member) {
+                $member = (array) $member;
+                $name = $member['full_name'] ?? "{$member['first_name']} {$member['last_name']}";
+                $party = $member['party_abbreviation'] ?? 'Unknown';
+                $chamber = ucfirst($member['chamber'] ?? 'Unknown');
+                $state = $member['state'] ?? '';
+                $district = isset($member['district']) ? " (District {$member['district']})" : '';
+                
+                $prompt .= "• {$name} ({$party}) - {$chamber}{$state}{$district}\n";
+            }
+            $prompt .= "\n";
+        }
+        
         // Add statistics
         if (!empty($data['statistics'])) {
-            $prompt .= "CONGRESSIONAL STATISTICS:\n";
+            $prompt .= "CURRENT CONGRESSIONAL STATISTICS (Live database counts):\n";
             foreach ($data['statistics'] as $key => $value) {
                 if (is_array($value)) {
-                    $prompt .= ucfirst(str_replace('_', ' ', $key)) . ":\n";
-                    foreach (array_slice($value, 0, 10) as $item) { // Limit items
+                    $prompt .= "📊 " . ucfirst(str_replace('_', ' ', $key)) . ":\n";
+                    foreach (array_slice($value, 0, 10) as $item) {
                         $item = (array) $item;
                         if (isset($item['count'])) {
                             $label = $item['policy_area'] ?? $item['party_abbreviation'] ?? $item['chamber'] ?? $item['type'] ?? 'Unknown';
-                            $prompt .= "  - {$label}: {$item['count']}\n";
+                            $prompt .= "  • {$label}: {$item['count']} bills\n";
                         }
                     }
                 } else {
-                    $prompt .= "- " . ucfirst(str_replace('_', ' ', $key)) . ": {$value}\n";
+                    $prompt .= "📈 " . ucfirst(str_replace('_', ' ', $key)) . ": {$value}\n";
                 }
             }
             $prompt .= "\n";
         }
         
+        // Add data sources for credibility
+        if (!empty($data['sources'])) {
+            $prompt .= "DATA SOURCES: " . implode(', ', $data['sources']) . "\n\n";
+        }
+        
         // Add conversation context
         if (!empty($context)) {
-            $prompt .= "CONVERSATION CONTEXT:\n";
+            $prompt .= "PREVIOUS CONVERSATION:\n";
             foreach (array_slice($context, -2) as $exchange) {
                 $prompt .= "Q: " . substr($exchange['question'] ?? '', 0, 100) . "\n";
                 $prompt .= "A: " . substr($exchange['response'] ?? '', 0, 150) . "...\n\n";
@@ -1856,9 +1892,16 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         }
         
         $prompt .= "USER QUESTION: {$question}\n\n";
-        $prompt .= "Please provide a comprehensive, detailed response using the congressional data above. ";
-        $prompt .= "Include specific bill numbers, statistics, and relevant details from the data. ";
-        $prompt .= "Be thorough and analytical in your response.";
+        
+        $prompt .= "INSTRUCTIONS:\n";
+        $prompt .= "1. You HAVE access to current congressional data (shown above)\n";
+        $prompt .= "2. Use the specific bills, members, and statistics provided\n";
+        $prompt .= "3. Reference exact bill numbers, names, and dates from the data\n";
+        $prompt .= "4. Be confident about the information - it's from the official database\n";
+        $prompt .= "5. Provide detailed analysis using the actual data shown\n";
+        $prompt .= "6. Do NOT say you lack access to current data - you have it above\n\n";
+        
+        $prompt .= "Provide a comprehensive response using the congressional database information above.";
         
         return $prompt;
     }
@@ -1967,9 +2010,10 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         }
         
         $prompt .= "User question: {$question}\n\n";
-        $prompt .= "Please provide a helpful, informative response using the congressional data provided above. ";
-        $prompt .= "Focus on the specific bills and information shown. If you need additional current data, ";
-        $prompt .= "suggest checking Congress.gov for the most up-to-date information.";
+        $prompt .= "IMPORTANT: You have access to congressional data above. Use it confidently in your response. ";
+        $prompt .= "Reference specific bills, numbers, and details from the data provided. ";
+        $prompt .= "Do NOT say you lack access to current congressional information - you have it above. ";
+        $prompt .= "Provide a detailed response using the actual congressional data shown.";
         
         return $prompt;
     }
