@@ -1,11 +1,14 @@
 <?php
 
+// Force memory limit FIRST before any other operations
+if (function_exists('ini_set')) {
+    ini_set('memory_limit', '2048M');
+    ini_set('max_execution_time', '300');
+}
+
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-
-// Force memory limit increase for the application
-ini_set('memory_limit', '2048M');
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
