@@ -1637,21 +1637,14 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         $data = ['sponsors' => [], 'cosponsors' => []];
         
         try {
-            // Get most active sponsors from bills table if we have sponsor info
-            $topSponsors = DB::table('bills')
-                ->join('members', function($join) {
-                    // Try different possible sponsor field names
-                    $join->on('bills.sponsor_bioguide_id', '=', 'members.bioguide_id')
-                         ->orOn('bills.sponsor_id', '=', 'members.id');
-                })
+            // Get member data (simplified without problematic sponsor join)
+            $topSponsors = DB::table('members')
                 ->select(
                     'members.first_name', 'members.last_name', 'members.full_name',
                     'members.party_abbreviation', 'members.state', 'members.chamber',
-                    DB::raw('COUNT(*) as bills_sponsored')
+                    'members.bioguide_id'
                 )
                 ->whereNotNull('members.full_name')
-                ->groupBy('members.id', 'members.first_name', 'members.last_name', 'members.full_name', 'members.party_abbreviation', 'members.state', 'members.chamber')
-                ->orderBy('bills_sponsored', 'desc')
                 ->limit(20)
                 ->get()
                 ->toArray();
@@ -1697,16 +1690,15 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         $data = ['bill_actions' => []];
         
         try {
-            // Try to get recent bill actions
-            $recentActions = DB::table('bill_actions')
-                ->join('bills', 'bill_actions.bill_id', '=', 'bills.id')
+            // Get recent bills with their latest actions instead
+            $recentActions = DB::table('bills')
                 ->select(
                     'bills.type', 'bills.number', 'bills.title',
-                    'bill_actions.action_date', 'bill_actions.action_text',
-                    'bill_actions.action_type'
+                    'bills.latest_action_date as action_date', 
+                    'bills.latest_action_text as action_text'
                 )
-                ->whereNotNull('bill_actions.action_date')
-                ->orderBy('bill_actions.action_date', 'desc')
+                ->whereNotNull('bills.latest_action_date')
+                ->orderBy('bills.latest_action_date', 'desc')
                 ->limit(25)
                 ->get()
                 ->toArray();
@@ -1771,8 +1763,14 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         
         if (!empty($data['bills'])) {
             $billCount = count($data['bills']);
-            $policyAreas = array_count_values(array_filter(array_column($data['bills'], 'policy_area')));
-            $recentBills = array_filter($data['bills'], function($bill) {
+            
+            // Convert objects to arrays for processing
+            $billsArray = array_map(function($bill) {
+                return is_object($bill) ? (array) $bill : $bill;
+            }, $data['bills']);
+            
+            $policyAreas = array_count_values(array_filter(array_column($billsArray, 'policy_area')));
+            $recentBills = array_filter($billsArray, function($bill) {
                 return isset($bill['introduced_date']) && $bill['introduced_date'] >= '2024-01-01';
             });
             
@@ -1787,7 +1785,7 @@ Please provide a helpful, well-formatted response combining both Claude semantic
             }
             
             // Analyze cosponsor patterns
-            $cosponsorCounts = array_filter(array_column($data['bills'], 'cosponsors_count'));
+            $cosponsorCounts = array_filter(array_column($billsArray, 'cosponsors_count'));
             if (!empty($cosponsorCounts)) {
                 $avgCosponsors = round(array_sum($cosponsorCounts) / count($cosponsorCounts), 1);
                 $maxCosponsors = max($cosponsorCounts);
@@ -1798,7 +1796,13 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         
         if (!empty($data['members'])) {
             $memberCount = count($data['members']);
-            $parties = array_count_values(array_column($data['members'], 'party_abbreviation'));
+            
+            // Convert objects to arrays for processing
+            $membersArray = array_map(function($member) {
+                return is_object($member) ? (array) $member : $member;
+            }, $data['members']);
+            
+            $parties = array_count_values(array_column($membersArray, 'party_abbreviation'));
             
             $insights .= "👥 Member Analysis:\n";
             $insights .= "  • Members analyzed: {$memberCount}\n";

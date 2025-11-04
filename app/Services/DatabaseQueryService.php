@@ -33,7 +33,25 @@ class DatabaseQueryService
             // Execute the queries
             $results = $this->executeQueries($queryResponse['queries']);
             
-            // Analyze results with AI
+            // Check if we have any successful results
+            $successfulResults = array_filter($results, function($result) {
+                return !isset($result['error']);
+            });
+            
+            $failedResults = array_filter($results, function($result) {
+                return isset($result['error']);
+            });
+            
+            // Log information about partial failures
+            if (!empty($failedResults)) {
+                Log::info('Some database queries failed, proceeding with partial data', [
+                    'successful_queries' => count($successfulResults),
+                    'failed_queries' => count($failedResults),
+                    'failed_query_names' => array_keys($failedResults)
+                ]);
+            }
+            
+            // Analyze results with AI (even if some queries failed)
             $analysis = $this->analyzeResults($question, $results, $schema);
             
             return [
@@ -42,7 +60,10 @@ class DatabaseQueryService
                 'results' => $results,
                 'analysis' => $analysis['analysis'] ?? 'Analysis not available',
                 'analysis_html' => $analysis['analysis_html'] ?? '',
-                'data_sources' => $this->generateDataSources($queryResponse['queries'])
+                'data_sources' => $this->generateDataSources($queryResponse['queries']),
+                'partial_data' => !empty($failedResults),
+                'successful_queries' => count($successfulResults),
+                'failed_queries' => count($failedResults)
             ];
             
         } catch (\Exception $e) {
@@ -235,6 +256,13 @@ IMPORTANT RULES FOR STATE QUERIES:
 - Include sponsor/cosponsor names and party information
 - Use proper state codes (e.g., 'NJ' for New Jersey, 'CA' for California)
 
+CRITICAL COLUMN NAME RULES:
+- bill_actions table uses 'text' and 'type' columns (NOT 'action_text' or 'action_type')
+- bills table does NOT have 'sponsor_bioguide_id' column
+- For sponsor data, JOIN bills with bill_sponsors table using bill_id
+- For cosponsor data, JOIN bills with bill_cosponsors table using bill_id
+- bill_sponsors and bill_cosponsors tables have bioguide_id to link to members table
+
 IMPORTANT TECHNICAL RULES:
 - Always use proper SQL syntax for SQLite
 - Use strftime() for date formatting in SQLite, not DATE_FORMAT()
@@ -242,6 +270,26 @@ IMPORTANT TECHNICAL RULES:
 - Include member names and details when relevant
 - Group by appropriate fields for aggregation
 - Use LEFT JOIN when you want to include records even if related data doesn't exist
+
+EXAMPLE CORRECT QUERIES:
+
+-- Get bill actions with correct column names:
+SELECT bills.congress_id, bills.title, bill_actions.text, bill_actions.type, bill_actions.action_date
+FROM bills 
+INNER JOIN bill_actions ON bills.id = bill_actions.bill_id
+ORDER BY bill_actions.action_date DESC
+
+-- Get bills with sponsor information (correct relationship):
+SELECT bills.congress_id, bills.title, members.full_name, members.party_abbreviation, members.state
+FROM bills 
+INNER JOIN bill_sponsors ON bills.id = bill_sponsors.bill_id
+INNER JOIN members ON bill_sponsors.bioguide_id = members.bioguide_id
+
+-- Get bills from a specific state:
+SELECT bills.congress_id, bills.title, bill_sponsors.full_name, bill_sponsors.party, bill_sponsors.state
+FROM bills 
+INNER JOIN bill_sponsors ON bills.id = bill_sponsors.bill_id
+WHERE bill_sponsors.state = 'NJ'
 
 RESPONSE FORMAT:
 Return ONLY a valid JSON object with this exact structure (no additional text):
@@ -340,6 +388,16 @@ Generate the queries now:";
                     }
                 }
                 
+                // Validate column names to prevent schema mismatches
+                $validationError = $this->validateQueryColumnNames($sql);
+                if ($validationError) {
+                    $results[$query['name']] = [
+                        'error' => $validationError,
+                        'description' => $query['description']
+                    ];
+                    continue;
+                }
+                
                 // Execute the query
                 $queryResult = DB::select($sql);
                 
@@ -351,6 +409,15 @@ Generate the queries now:";
                 ];
                 
             } catch (\Exception $e) {
+                // Log detailed error information for debugging
+                Log::warning('Database query failed', [
+                    'query_name' => $query['name'],
+                    'sql' => $query['sql'],
+                    'error' => $e->getMessage(),
+                    'error_code' => $e->getCode(),
+                    'description' => $query['description']
+                ]);
+                
                 $results[$query['name']] = [
                     'error' => $e->getMessage(),
                     'sql' => $query['sql'],
@@ -367,6 +434,15 @@ Generate the queries now:";
      */
     private function analyzeResults(string $question, array $results, string $schema): array
     {
+        // Count successful vs failed queries
+        $successfulResults = array_filter($results, function($result) {
+            return !isset($result['error']);
+        });
+        
+        $failedResults = array_filter($results, function($result) {
+            return isset($result['error']);
+        });
+        
         $prompt = "You are a friendly congressional data analyst. Provide a simple, easy-to-understand summary of the data.
 
 USER QUESTION: {$question}
@@ -392,6 +468,11 @@ QUERY RESULTS:
                 }
             }
         }
+        
+        // Add information about data availability
+        if (!empty($failedResults)) {
+            $prompt .= "\n\nDATA AVAILABILITY NOTE: Some queries failed (" . count($failedResults) . " out of " . count($results) . "), so this analysis is based on partial data from " . count($successfulResults) . " successful queries.";
+        }
 
         $prompt .= "
 
@@ -401,10 +482,12 @@ INSTRUCTIONS:
 3. List the key findings with specific numbers
 4. If there are bills mentioned, format them as: **[Bill Type] [Number]: [Title]** (we'll add links later)
 5. When you have congress_id data, you can reference specific bills by their type and number
-5. Use bullet points for easy reading
-6. Avoid technical jargon, statistics terminology, or complex analysis
-7. Keep it concise and focused on the most interesting findings
-8. Don't mention SQL, databases, or technical details
+6. Use bullet points for easy reading
+7. Avoid technical jargon, statistics terminology, or complex analysis
+8. Keep it concise and focused on the most interesting findings
+9. Don't mention SQL, databases, or technical details
+10. If some data sources failed, acknowledge this briefly and focus on available data
+11. If working with partial data, clearly indicate which information sources were available
 
 Write a friendly, informative response:";
 
@@ -456,6 +539,33 @@ Write a friendly, informative response:";
                     'state_code' => $stateCode
                 ];
             }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Validate query column names to prevent schema mismatches
+     */
+    private function validateQueryColumnNames(string $sql): ?string
+    {
+        // Check for incorrect bill_actions column names
+        if (preg_match('/bill_actions\s*\.\s*action_text\b/i', $sql)) {
+            return "Invalid column 'action_text' in bill_actions table. Use 'text' instead.";
+        }
+        
+        if (preg_match('/bill_actions\s*\.\s*action_type\b/i', $sql)) {
+            return "Invalid column 'action_type' in bill_actions table. Use 'type' instead.";
+        }
+        
+        // Check for incorrect sponsor column references on bills table
+        if (preg_match('/bills\s*\.\s*sponsor_bioguide_id\b/i', $sql)) {
+            return "Invalid column 'sponsor_bioguide_id' on bills table. Use JOIN with bill_sponsors table instead.";
+        }
+        
+        // Check for incorrect joins that try to use sponsor_bioguide_id on bills
+        if (preg_match('/JOIN\s+members\s+ON\s+bills\s*\.\s*sponsor_bioguide_id/i', $sql)) {
+            return "Invalid JOIN: bills table doesn't have sponsor_bioguide_id. Use bill_sponsors table for sponsor relationships.";
         }
         
         return null;
