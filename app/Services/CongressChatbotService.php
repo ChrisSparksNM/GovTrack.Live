@@ -2151,60 +2151,7 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         return $prompt;
     }
 
-    /**
-     * Add analytical insights to help Claude understand the data better
-     */
-    private function addAnalyticalInsights(array $data): string
-    {
-        $insights = "\nANALYTICAL INSIGHTS FOR YOUR RESPONSE:\n";
-        
-        // Bill insights
-        if (!empty($data['bills'])) {
-            $billCount = count($data['bills']);
-            $insights .= "• You have {$billCount} bills to analyze\n";
-            
-            // Policy area distribution
-            $policyAreas = [];
-            foreach ($data['bills'] as $bill) {
-                $bill = (array) $bill;
-                if (!empty($bill['policy_area'])) {
-                    $policyAreas[$bill['policy_area']] = ($policyAreas[$bill['policy_area']] ?? 0) + 1;
-                }
-            }
-            if (!empty($policyAreas)) {
-                arsort($policyAreas);
-                $topArea = array_key_first($policyAreas);
-                $insights .= "• Most common policy area: {$topArea} ({$policyAreas[$topArea]} bills)\n";
-            }
-        }
-        
-        // Sponsor insights
-        if (!empty($data['sponsors'])) {
-            $sponsorCount = count($data['sponsors']);
-            $insights .= "• You have sponsor data for {$sponsorCount} members\n";
-            
-            $topSponsor = (array) $data['sponsors'][0];
-            $name = $topSponsor['full_name'] ?? 'Unknown';
-            $billCount = $topSponsor['bills_sponsored'] ?? 0;
-            $insights .= "• Most active sponsor: {$name} with {$billCount} bills\n";
-        }
-        
-        // Member insights
-        if (!empty($data['members'])) {
-            $memberCount = count($data['members']);
-            $insights .= "• You have data on {$memberCount} congress members\n";
-        }
-        
-        // Action insights
-        if (!empty($data['bill_actions'])) {
-            $actionCount = count($data['bill_actions']);
-            $insights .= "• You have {$actionCount} recent bill actions to reference\n";
-        }
-        
-        $insights .= "• Use this data confidently - it's from the official congressional database\n\n";
-        
-        return $insights;
-    }
+
 
     /**
      * Lazy load DatabaseQueryService only when needed
