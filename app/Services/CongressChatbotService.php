@@ -102,7 +102,7 @@ class CongressChatbotService
                 $claudeContext = $this->buildClaudeSemanticContext($claudeResults);
                 
                 // Combine with database query for statistical backing
-                $databaseResult = $this->databaseQueryService->queryDatabase($question);
+                $databaseResult = $this->getDatabaseQueryService()->queryDatabase($question);
                 
                 // Build enhanced prompt with Claude analysis
                 $prompt = $this->buildClaudeEnhancedPrompt($question, $claudeContext, $databaseResult, $context);
@@ -163,7 +163,7 @@ class CongressChatbotService
                 $semanticContext = $this->buildSemanticContext($semanticResults['results']);
                 
                 // Combine with database query for comprehensive answer
-                $databaseResult = $this->databaseQueryService->queryDatabase($question);
+                $databaseResult = $this->getDatabaseQueryService()->queryDatabase($question);
                 
                 // Build enhanced prompt with both semantic and database context
                 $prompt = $this->buildEnhancedPrompt($question, $semanticContext, $databaseResult, $context);
@@ -460,18 +460,33 @@ class CongressChatbotService
      */
     private function getMemberData(string $question): array
     {
-        $data = ['members' => [], 'sources' => []];
+        $data = ['members' => [], 'bills' => [], 'sources' => []];
         
-        // Try to extract member name
-        preg_match('/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/', $question, $matches);
-        
-        if (!empty($matches)) {
-            $firstName = $matches[1];
-            $lastName = $matches[2];
+        try {
+            // Try to extract member name with more flexible patterns
+            $member = null;
             
-            $member = Member::where('first_name', 'like', "%{$firstName}%")
-                           ->where('last_name', 'like', "%{$lastName}%")
-                           ->first();
+            // Try full name patterns
+            if (preg_match('/\b([A-Z][a-z]+)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/', $question, $matches)) {
+                $firstName = $matches[1];
+                $lastName = $matches[2];
+                
+                $member = Member::where('first_name', 'like', "%{$firstName}%")
+                               ->where('last_name', 'like', "%{$lastName}%")
+                               ->first();
+                               
+                // If not found, try searching full_name field
+                if (!$member) {
+                    $fullName = trim($firstName . ' ' . $lastName);
+                    $member = Member::where('full_name', 'like', "%{$fullName}%")->first();
+                }
+            }
+            
+            // Try searching by last name only if full name search failed
+            if (!$member && preg_match('/\b([A-Z][a-z]{2,})\b/', $question, $matches)) {
+                $lastName = $matches[1];
+                $member = Member::where('last_name', 'like', "%{$lastName}%")->first();
+            }
                            
             if ($member) {
                 $memberArray = $member->toArray();
@@ -479,19 +494,65 @@ class CongressChatbotService
                 $memberArray['chamber_display'] = $member->chamber_display;
                 $data['members'][] = $memberArray;
                 $data['sources'][] = "Member profile: {$member->display_name}";
+                
+                // Get bills sponsored by this member
+                try {
+                    $sponsoredBills = Bill::join('bill_sponsors', 'bills.id', '=', 'bill_sponsors.bill_id')
+                        ->where('bill_sponsors.bioguide_id', $member->bioguide_id)
+                        ->select('bills.*')
+                        ->orderBy('bills.introduced_date', 'desc')
+                        ->limit(10)
+                        ->get()
+                        ->toArray();
+                        
+                    if (!empty($sponsoredBills)) {
+                        $data['bills'] = $sponsoredBills;
+                        $data['sources'][] = "Recent bills sponsored by {$member->display_name} (" . count($sponsoredBills) . " bills)";
+                    }
+                    
+                    // Also get bills they cosponsored
+                    $cosponsoredBills = Bill::join('bill_cosponsors', 'bills.id', '=', 'bill_cosponsors.bill_id')
+                        ->where('bill_cosponsors.bioguide_id', $member->bioguide_id)
+                        ->select('bills.*')
+                        ->orderBy('bills.introduced_date', 'desc')
+                        ->limit(5)
+                        ->get()
+                        ->toArray();
+                        
+                    if (!empty($cosponsoredBills)) {
+                        $data['bills'] = array_merge($data['bills'], $cosponsoredBills);
+                        $data['sources'][] = "Recent bills cosponsored by {$member->display_name} (" . count($cosponsoredBills) . " bills)";
+                    }
+                    
+                } catch (\Exception $e) {
+                    Log::warning('Failed to get bills for member', [
+                        'member' => $member->full_name,
+                        'bioguide_id' => $member->bioguide_id,
+                        'error' => $e->getMessage()
+                    ]);
+                    $data['sources'][] = "Member found but bill data temporarily unavailable";
+                }
+            } else {
+                // Get sample of current members if no specific member found
+                $members = Member::current()->limit(10)->get();
+                $membersArray = [];
+                foreach ($members as $member) {
+                    $memberArray = $member->toArray();
+                    $memberArray['display_name'] = $member->display_name;
+                    $memberArray['chamber_display'] = $member->chamber_display;
+                    $membersArray[] = $memberArray;
+                }
+                $data['members'] = $membersArray;
+                $data['sources'][] = "Sample of current members (specific member not found)";
             }
-        } else {
-            // Get sample of current members
-            $members = Member::current()->limit(10)->get();
-            $membersArray = [];
-            foreach ($members as $member) {
-                $memberArray = $member->toArray();
-                $memberArray['display_name'] = $member->display_name;
-                $memberArray['chamber_display'] = $member->chamber_display;
-                $membersArray[] = $memberArray;
-            }
-            $data['members'] = $membersArray;
-            $data['sources'][] = "Sample of current members";
+            
+        } catch (\Exception $e) {
+            Log::error('Error in getMemberData', [
+                'question' => $question,
+                'error' => $e->getMessage()
+            ]);
+            
+            $data['sources'][] = "Member data temporarily unavailable";
         }
         
         return $data;
@@ -628,46 +689,110 @@ class CongressChatbotService
      */
     private function getTrendData(string $question): array
     {
-        // Use SQLite-compatible date formatting
-        $dateFormat = config('database.default') === 'mysql' 
-            ? 'DATE_FORMAT(introduced_date, "%Y-%m")' 
-            : 'strftime("%Y-%m", introduced_date)';
-            
-        $stats = [
-            'recent_bills_by_month' => Bill::select(
-                DB::raw($dateFormat . ' as month'),
-                DB::raw('count(*) as count')
-            )
-            ->where('introduced_date', '>=', now()->subMonths(12))
-            ->groupBy('month')
-            ->orderBy('month', 'desc')
-            ->get()
-            ->toArray(),
-            
-            'popular_policy_areas' => Bill::select('policy_area', DB::raw('count(*) as count'))
-                ->whereNotNull('policy_area')
-                ->where('introduced_date', '>=', now()->subMonths(6))
-                ->groupBy('policy_area')
-                ->orderBy('count', 'desc')
-                ->limit(10)
-                ->get()
-                ->toArray(),
+        try {
+            // Use SQLite-compatible date formatting
+            $dateFormat = config('database.default') === 'mysql' 
+                ? 'DATE_FORMAT(introduced_date, "%Y-%m")' 
+                : 'strftime("%Y-%m", introduced_date)';
                 
-            'most_active_sponsors' => Member::select('members.full_name', 'members.party_abbreviation', 'members.state', DB::raw('count(*) as bills_sponsored'))
-                ->join('bill_sponsors', 'members.bioguide_id', '=', 'bill_sponsors.bioguide_id')
-                ->join('bills', 'bill_sponsors.bill_id', '=', 'bills.id')
-                ->where('bills.introduced_date', '>=', now()->subMonths(6))
-                ->groupBy('members.bioguide_id', 'members.full_name', 'members.party_abbreviation', 'members.state')
-                ->orderBy('bills_sponsored', 'desc')
-                ->limit(10)
+            $stats = [];
+            
+            // Recent bills by month with error handling
+            try {
+                $stats['recent_bills_by_month'] = Bill::select(
+                    DB::raw($dateFormat . ' as month'),
+                    DB::raw('count(*) as count')
+                )
+                ->where('introduced_date', '>=', now()->subMonths(12))
+                ->groupBy('month')
+                ->orderBy('month', 'desc')
                 ->get()
-                ->toArray()
-        ];
-        
-        return [
-            'statistics' => $stats,
-            'sources' => ['Recent legislative trends and activity patterns']
-        ];
+                ->toArray();
+            } catch (\Exception $e) {
+                Log::warning('Failed to get recent bills by month', ['error' => $e->getMessage()]);
+                $stats['recent_bills_by_month'] = [];
+            }
+            
+            // Popular policy areas with error handling
+            try {
+                $stats['popular_policy_areas'] = Bill::select('policy_area', DB::raw('count(*) as count'))
+                    ->whereNotNull('policy_area')
+                    ->where('introduced_date', '>=', now()->subMonths(6))
+                    ->groupBy('policy_area')
+                    ->orderBy('count', 'desc')
+                    ->limit(10)
+                    ->get()
+                    ->toArray();
+            } catch (\Exception $e) {
+                Log::warning('Failed to get popular policy areas', ['error' => $e->getMessage()]);
+                $stats['popular_policy_areas'] = [];
+            }
+            
+            // Most active sponsors with improved query and error handling
+            try {
+                $stats['most_active_sponsors'] = Member::select(
+                        'members.full_name', 
+                        'members.party_abbreviation', 
+                        'members.state', 
+                        'members.bioguide_id',
+                        DB::raw('count(bills.id) as bills_sponsored')
+                    )
+                    ->join('bill_sponsors', 'members.bioguide_id', '=', 'bill_sponsors.bioguide_id')
+                    ->join('bills', 'bill_sponsors.bill_id', '=', 'bills.id')
+                    ->where('bills.introduced_date', '>=', now()->subMonths(12)) // Extended to 12 months for better coverage
+                    ->groupBy('members.bioguide_id', 'members.full_name', 'members.party_abbreviation', 'members.state')
+                    ->orderBy('bills_sponsored', 'desc')
+                    ->limit(20) // Increased limit to show more sponsors
+                    ->get()
+                    ->toArray();
+            } catch (\Exception $e) {
+                Log::warning('Failed to get most active sponsors with recent bills', [
+                    'error' => $e->getMessage(),
+                    'fallback' => 'trying without date restriction'
+                ]);
+                
+                // Fallback: Get sponsors without date restriction
+                try {
+                    $stats['most_active_sponsors'] = Member::select(
+                            'members.full_name', 
+                            'members.party_abbreviation', 
+                            'members.state', 
+                            'members.bioguide_id',
+                            DB::raw('count(bills.id) as bills_sponsored')
+                        )
+                        ->join('bill_sponsors', 'members.bioguide_id', '=', 'bill_sponsors.bioguide_id')
+                        ->join('bills', 'bill_sponsors.bill_id', '=', 'bills.id')
+                        ->groupBy('members.bioguide_id', 'members.full_name', 'members.party_abbreviation', 'members.state')
+                        ->orderBy('bills_sponsored', 'desc')
+                        ->limit(20)
+                        ->get()
+                        ->toArray();
+                } catch (\Exception $fallbackError) {
+                    Log::error('Failed to get sponsors even without date restriction', [
+                        'error' => $fallbackError->getMessage()
+                    ]);
+                    $stats['most_active_sponsors'] = [];
+                }
+            }
+            
+            return [
+                'statistics' => $stats,
+                'sources' => ['Recent legislative trends and activity patterns'],
+                'partial_data' => !empty(array_filter($stats)) // Indicate if we have partial data
+            ];
+            
+        } catch (\Exception $e) {
+            Log::error('Complete failure in getTrendData', [
+                'error' => $e->getMessage(),
+                'question' => $question
+            ]);
+            
+            return [
+                'statistics' => [],
+                'sources' => ['Trend data temporarily unavailable'],
+                'error' => 'Failed to retrieve trend data'
+            ];
+        }
     }
 
     /**
@@ -1282,7 +1407,7 @@ Please provide a helpful, well-formatted response combining both Claude semantic
                 $executiveOrderContext = $this->buildExecutiveOrderContext($executiveOrderResults['executive_orders']);
                 
                 // Also get database statistics for comprehensive answer
-                $databaseResult = $this->databaseQueryService->queryDatabase($question);
+                $databaseResult = $this->getDatabaseQueryService()->queryDatabase($question);
                 
                 // Build enhanced prompt with executive order focus
                 $prompt = "Based on this executive order data, answer the user's question:\n\n";
@@ -1548,45 +1673,105 @@ Please provide a helpful, well-formatted response combining both Claude semantic
             $firstName = $nameParts[0];
             $lastName = $nameParts[1];
             
+            // First try to find the member
             $member = DB::table('members')
-                ->select('id', 'first_name', 'last_name', 'full_name', 'party_abbreviation', 
-                        'party_name', 'state', 'district', 'chamber', 'current')
+                ->select('id', 'bioguide_id', 'first_name', 'last_name', 'full_name', 'party_abbreviation', 
+                        'party_name', 'state', 'district', 'chamber', 'current_member',
+                        'sponsored_legislation_count', 'cosponsored_legislation_count')
                 ->where('first_name', 'like', "%{$firstName}%")
                 ->where('last_name', 'like', "%{$lastName}%")
-                ->where('current', true)
+                ->where('current_member', true)
                 ->first();
                 
+            // If not found, try searching full_name field
+            if (!$member) {
+                $member = DB::table('members')
+                    ->select('id', 'bioguide_id', 'first_name', 'last_name', 'full_name', 'party_abbreviation', 
+                            'party_name', 'state', 'district', 'chamber', 'current_member',
+                            'sponsored_legislation_count', 'cosponsored_legislation_count')
+                    ->where('full_name', 'like', "%{$memberName}%")
+                    ->where('current_member', true)
+                    ->first();
+            }
+                
             if ($member) {
-                // Get bills sponsored by this member (if we have that data)
-                $relatedBills = DB::table('bills')
-                    ->select('type', 'number', 'title', 'introduced_date', 'policy_area')
-                    ->where('title', 'like', "%{$member->last_name}%")
-                    ->orderBy('introduced_date', 'desc')
-                    ->limit(10)
-                    ->get()
-                    ->toArray();
+                try {
+                    // Get bills actually sponsored by this member using proper join
+                    $sponsoredBills = DB::table('bills')
+                        ->join('bill_sponsors', 'bills.id', '=', 'bill_sponsors.bill_id')
+                        ->select('bills.type', 'bills.number', 'bills.title', 'bills.introduced_date', 
+                                'bills.policy_area', 'bills.congress_id', 'bills.latest_action_date', 'bills.latest_action_text')
+                        ->where('bill_sponsors.bioguide_id', $member->bioguide_id)
+                        ->orderBy('bills.introduced_date', 'desc')
+                        ->limit(15)
+                        ->get()
+                        ->toArray();
+                        
+                    // Also get bills they cosponsored
+                    $cosponsoredBills = DB::table('bills')
+                        ->join('bill_cosponsors', 'bills.id', '=', 'bill_cosponsors.bill_id')
+                        ->select('bills.type', 'bills.number', 'bills.title', 'bills.introduced_date', 
+                                'bills.policy_area', 'bills.congress_id')
+                        ->where('bill_cosponsors.bioguide_id', $member->bioguide_id)
+                        ->orderBy('bills.introduced_date', 'desc')
+                        ->limit(10)
+                        ->get()
+                        ->toArray();
+                        
+                    $allBills = array_merge($sponsoredBills, $cosponsoredBills);
                     
-                return [
-                    'members' => [$member],
-                    'bills' => $relatedBills,
-                    'sources' => ["Member profile: {$member->full_name}", "Related legislation"],
-                    'summary' => ['member_found' => $member->full_name, 'related_bills' => count($relatedBills)]
-                ];
+                    Log::info('Found member data', [
+                        'member' => $member->full_name,
+                        'bioguide_id' => $member->bioguide_id,
+                        'sponsored_bills' => count($sponsoredBills),
+                        'cosponsored_bills' => count($cosponsoredBills)
+                    ]);
+                        
+                    return [
+                        'members' => [$member],
+                        'bills' => $allBills,
+                        'sources' => [
+                            "Member profile: {$member->full_name} ({$member->party_abbreviation}-{$member->state})",
+                            "Bills sponsored: " . count($sponsoredBills),
+                            "Bills cosponsored: " . count($cosponsoredBills)
+                        ],
+                        'summary' => [
+                            'member_found' => $member->full_name,
+                            'sponsored_bills' => count($sponsoredBills),
+                            'cosponsored_bills' => count($cosponsoredBills),
+                            'total_bills' => count($allBills)
+                        ]
+                    ];
+                    
+                } catch (\Exception $e) {
+                    Log::error('Failed to get bills for member', [
+                        'member' => $member->full_name,
+                        'bioguide_id' => $member->bioguide_id,
+                        'error' => $e->getMessage()
+                    ]);
+                    
+                    return [
+                        'members' => [$member],
+                        'bills' => [],
+                        'sources' => ["Member profile: {$member->full_name} (bill data temporarily unavailable)"],
+                        'summary' => ['member_found' => $member->full_name, 'bills_error' => true]
+                    ];
+                }
             }
         }
         
         // Fallback: get members from mentioned state or party
         $members = DB::table('members')
-            ->select('first_name', 'last_name', 'full_name', 'party_abbreviation', 'state', 'chamber')
-            ->where('current', true)
+            ->select('first_name', 'last_name', 'full_name', 'party_abbreviation', 'state', 'chamber', 'current_member')
+            ->where('current_member', true)
             ->limit(15)
             ->get()
             ->toArray();
             
         return [
             'members' => $members,
-            'sources' => ['Current members of Congress'],
-            'summary' => ['type' => 'member_search', 'members_found' => count($members)]
+            'sources' => ['Current members of Congress (specific member not found)'],
+            'summary' => ['type' => 'member_search_fallback', 'members_found' => count($members)]
         ];
     }
 
@@ -1637,32 +1822,42 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         $data = ['sponsors' => [], 'cosponsors' => []];
         
         try {
-            // Get member data (simplified without problematic sponsor join)
+            // Get actual sponsor data using proper bill_sponsors table join
             $topSponsors = DB::table('members')
+                ->join('bill_sponsors', 'members.bioguide_id', '=', 'bill_sponsors.bioguide_id')
+                ->join('bills', 'bill_sponsors.bill_id', '=', 'bills.id')
                 ->select(
                     'members.first_name', 'members.last_name', 'members.full_name',
                     'members.party_abbreviation', 'members.state', 'members.chamber',
-                    'members.bioguide_id'
+                    'members.bioguide_id',
+                    DB::raw('COUNT(bills.id) as bills_sponsored')
                 )
-                ->whereNotNull('members.full_name')
+                ->where('members.current_member', true)
+                ->groupBy('members.bioguide_id', 'members.first_name', 'members.last_name', 'members.full_name', 
+                         'members.party_abbreviation', 'members.state', 'members.chamber')
+                ->orderBy('bills_sponsored', 'desc')
                 ->limit(20)
                 ->get()
                 ->toArray();
                 
             if (!empty($topSponsors)) {
                 $data['sponsors'] = $topSponsors;
+                Log::info('Retrieved sponsor data', ['sponsors_count' => count($topSponsors)]);
             }
             
-            // Try to get co-sponsor data from separate table if it exists
+            // Get co-sponsor data from bill_cosponsors table
             try {
-                $cosponsors = DB::table('bill_cosponsors')
-                    ->join('members', 'bill_cosponsors.bioguide_id', '=', 'members.bioguide_id')
+                $cosponsors = DB::table('members')
+                    ->join('bill_cosponsors', 'members.bioguide_id', '=', 'bill_cosponsors.bioguide_id')
+                    ->join('bills', 'bill_cosponsors.bill_id', '=', 'bills.id')
                     ->select(
                         'members.first_name', 'members.last_name', 'members.full_name',
-                        'members.party_abbreviation', 'members.state',
-                        DB::raw('COUNT(*) as bills_cosponsored')
+                        'members.party_abbreviation', 'members.state', 'members.chamber',
+                        DB::raw('COUNT(bills.id) as bills_cosponsored')
                     )
-                    ->groupBy('members.id', 'members.first_name', 'members.last_name', 'members.full_name', 'members.party_abbreviation', 'members.state')
+                    ->where('members.current_member', true)
+                    ->groupBy('members.bioguide_id', 'members.first_name', 'members.last_name', 'members.full_name', 
+                             'members.party_abbreviation', 'members.state', 'members.chamber')
                     ->orderBy('bills_cosponsored', 'desc')
                     ->limit(15)
                     ->get()
@@ -1670,13 +1865,34 @@ Please provide a helpful, well-formatted response combining both Claude semantic
                     
                 if (!empty($cosponsors)) {
                     $data['cosponsors'] = $cosponsors;
+                    Log::info('Retrieved cosponsor data', ['cosponsors_count' => count($cosponsors)]);
                 }
             } catch (\Exception $e) {
-                // Co-sponsor table might not exist
+                Log::warning('Could not retrieve cosponsor data', ['error' => $e->getMessage()]);
             }
             
         } catch (\Exception $e) {
-            Log::warning('Could not retrieve sponsor data', ['error' => $e->getMessage()]);
+            Log::warning('Could not retrieve sponsor data, using fallback', ['error' => $e->getMessage()]);
+            
+            // Fallback: get members without sponsor counts
+            try {
+                $fallbackSponsors = DB::table('members')
+                    ->select(
+                        'members.first_name', 'members.last_name', 'members.full_name',
+                        'members.party_abbreviation', 'members.state', 'members.chamber',
+                        'members.bioguide_id', 'members.sponsored_legislation_count as bills_sponsored'
+                    )
+                    ->where('members.current_member', true)
+                    ->whereNotNull('members.full_name')
+                    ->orderBy('members.sponsored_legislation_count', 'desc')
+                    ->limit(20)
+                    ->get()
+                    ->toArray();
+                    
+                $data['sponsors'] = $fallbackSponsors;
+            } catch (\Exception $fallbackError) {
+                Log::error('Complete failure to retrieve sponsor data', ['error' => $fallbackError->getMessage()]);
+            }
         }
         
         return $data;
@@ -1690,26 +1906,61 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         $data = ['bill_actions' => []];
         
         try {
-            // Get recent bills with their latest actions instead
-            $recentActions = DB::table('bills')
+            // First try to get actual bill actions from bill_actions table using correct column names
+            $billActions = DB::table('bill_actions')
+                ->join('bills', 'bill_actions.bill_id', '=', 'bills.id')
                 ->select(
-                    'bills.type', 'bills.number', 'bills.title',
-                    'bills.latest_action_date as action_date', 
-                    'bills.latest_action_text as action_text'
+                    'bills.type', 'bills.number', 'bills.title', 'bills.congress_id',
+                    'bill_actions.action_date', 
+                    'bill_actions.text as action_text',  // Correct column name
+                    'bill_actions.type as action_type'   // Correct column name
                 )
-                ->whereNotNull('bills.latest_action_date')
-                ->orderBy('bills.latest_action_date', 'desc')
+                ->whereNotNull('bill_actions.action_date')
+                ->orderBy('bill_actions.action_date', 'desc')
                 ->limit(25)
                 ->get()
                 ->toArray();
                 
-            if (!empty($recentActions)) {
-                $data['bill_actions'] = $recentActions;
+            if (!empty($billActions)) {
+                $data['bill_actions'] = $billActions;
+                Log::info('Retrieved bill actions from bill_actions table', ['actions_count' => count($billActions)]);
+            } else {
+                // Fallback: Get recent bills with their latest actions from bills table
+                $recentActions = DB::table('bills')
+                    ->select(
+                        'bills.type', 'bills.number', 'bills.title', 'bills.congress_id',
+                        'bills.latest_action_date as action_date', 
+                        'bills.latest_action_text as action_text'
+                    )
+                    ->whereNotNull('bills.latest_action_date')
+                    ->orderBy('bills.latest_action_date', 'desc')
+                    ->limit(25)
+                    ->get()
+                    ->toArray();
+                    
+                if (!empty($recentActions)) {
+                    $data['bill_actions'] = $recentActions;
+                    Log::info('Retrieved bill actions from bills table fallback', ['actions_count' => count($recentActions)]);
+                }
             }
             
         } catch (\Exception $e) {
-            // Bill actions table might not exist or have different structure
             Log::warning('Could not retrieve bill actions', ['error' => $e->getMessage()]);
+            
+            // Final fallback: just get recent bills without action details
+            try {
+                $recentBills = DB::table('bills')
+                    ->select('type', 'number', 'title', 'congress_id', 'introduced_date')
+                    ->whereNotNull('introduced_date')
+                    ->orderBy('introduced_date', 'desc')
+                    ->limit(20)
+                    ->get()
+                    ->toArray();
+                    
+                $data['bill_actions'] = $recentBills;
+            } catch (\Exception $fallbackError) {
+                Log::error('Complete failure to retrieve any bill data', ['error' => $fallbackError->getMessage()]);
+            }
         }
         
         return $data;
@@ -1764,53 +2015,111 @@ Please provide a helpful, well-formatted response combining both Claude semantic
         if (!empty($data['bills'])) {
             $billCount = count($data['bills']);
             
-            // Convert objects to arrays for processing
-            $billsArray = array_map(function($bill) {
-                return is_object($bill) ? (array) $bill : $bill;
-            }, $data['bills']);
-            
-            $policyAreas = array_count_values(array_filter(array_column($billsArray, 'policy_area')));
-            $recentBills = array_filter($billsArray, function($bill) {
-                return isset($bill['introduced_date']) && $bill['introduced_date'] >= '2024-01-01';
-            });
-            
-            $insights .= "📊 Bill Analysis:\n";
-            $insights .= "  • Total bills analyzed: {$billCount}\n";
-            $insights .= "  • Recent bills (2024+): " . count($recentBills) . "\n";
-            
-            if (!empty($policyAreas)) {
-                arsort($policyAreas);
-                $topArea = array_key_first($policyAreas);
-                $insights .= "  • Most common policy area: {$topArea} ({$policyAreas[$topArea]} bills)\n";
+            // Robust data type conversion with error handling
+            $billsArray = [];
+            foreach ($data['bills'] as $bill) {
+                try {
+                    // Handle both objects and arrays consistently
+                    if (is_object($bill)) {
+                        // Check if it's an Eloquent model with toArray method
+                        if (method_exists($bill, 'toArray')) {
+                            $billsArray[] = $bill->toArray();
+                        } else {
+                            // Convert stdClass to array
+                            $billsArray[] = (array) $bill;
+                        }
+                    } elseif (is_array($bill)) {
+                        $billsArray[] = $bill;
+                    } else {
+                        Log::warning('Unexpected bill data type', [
+                            'type' => gettype($bill),
+                            'method' => 'addAnalyticalInsights'
+                        ]);
+                        continue;
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Data type conversion error in addAnalyticalInsights', [
+                        'error' => $e->getMessage(),
+                        'bill_type' => gettype($bill),
+                        'line' => __LINE__
+                    ]);
+                    continue;
+                }
             }
             
-            // Analyze cosponsor patterns
-            $cosponsorCounts = array_filter(array_column($billsArray, 'cosponsors_count'));
-            if (!empty($cosponsorCounts)) {
-                $avgCosponsors = round(array_sum($cosponsorCounts) / count($cosponsorCounts), 1);
-                $maxCosponsors = max($cosponsorCounts);
-                $insights .= "  • Average cosponsors: {$avgCosponsors}\n";
-                $insights .= "  • Highest cosponsor count: {$maxCosponsors}\n";
+            if (!empty($billsArray)) {
+                $policyAreas = array_count_values(array_filter(array_column($billsArray, 'policy_area')));
+                $recentBills = array_filter($billsArray, function($bill) {
+                    return isset($bill['introduced_date']) && $bill['introduced_date'] >= '2024-01-01';
+                });
+                
+                $insights .= "📊 Bill Analysis:\n";
+                $insights .= "  • Total bills analyzed: {$billCount}\n";
+                $insights .= "  • Recent bills (2024+): " . count($recentBills) . "\n";
+                
+                if (!empty($policyAreas)) {
+                    arsort($policyAreas);
+                    $topArea = array_key_first($policyAreas);
+                    $insights .= "  • Most common policy area: {$topArea} ({$policyAreas[$topArea]} bills)\n";
+                }
+                
+                // Analyze cosponsor patterns
+                $cosponsorCounts = array_filter(array_column($billsArray, 'cosponsors_count'));
+                if (!empty($cosponsorCounts)) {
+                    $avgCosponsors = round(array_sum($cosponsorCounts) / count($cosponsorCounts), 1);
+                    $maxCosponsors = max($cosponsorCounts);
+                    $insights .= "  • Average cosponsors: {$avgCosponsors}\n";
+                    $insights .= "  • Highest cosponsor count: {$maxCosponsors}\n";
+                }
             }
         }
         
         if (!empty($data['members'])) {
             $memberCount = count($data['members']);
             
-            // Convert objects to arrays for processing
-            $membersArray = array_map(function($member) {
-                return is_object($member) ? (array) $member : $member;
-            }, $data['members']);
+            // Robust data type conversion with error handling
+            $membersArray = [];
+            foreach ($data['members'] as $member) {
+                try {
+                    // Handle both objects and arrays consistently
+                    if (is_object($member)) {
+                        // Check if it's an Eloquent model with toArray method
+                        if (method_exists($member, 'toArray')) {
+                            $membersArray[] = $member->toArray();
+                        } else {
+                            // Convert stdClass to array
+                            $membersArray[] = (array) $member;
+                        }
+                    } elseif (is_array($member)) {
+                        $membersArray[] = $member;
+                    } else {
+                        Log::warning('Unexpected member data type', [
+                            'type' => gettype($member),
+                            'method' => 'addAnalyticalInsights'
+                        ]);
+                        continue;
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Data type conversion error in addAnalyticalInsights', [
+                        'error' => $e->getMessage(),
+                        'member_type' => gettype($member),
+                        'line' => __LINE__
+                    ]);
+                    continue;
+                }
+            }
             
-            $parties = array_count_values(array_column($membersArray, 'party_abbreviation'));
-            
-            $insights .= "👥 Member Analysis:\n";
-            $insights .= "  • Members analyzed: {$memberCount}\n";
-            
-            if (!empty($parties)) {
-                arsort($parties);
-                foreach ($parties as $party => $count) {
-                    $insights .= "  • {$party}: {$count} members\n";
+            if (!empty($membersArray)) {
+                $parties = array_count_values(array_filter(array_column($membersArray, 'party_abbreviation')));
+                
+                $insights .= "👥 Member Analysis:\n";
+                $insights .= "  • Members analyzed: {$memberCount}\n";
+                
+                if (!empty($parties)) {
+                    arsort($parties);
+                    foreach ($parties as $party => $count) {
+                        $insights .= "  • {$party}: {$count} members\n";
+                    }
                 }
             }
         }
