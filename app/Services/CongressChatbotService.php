@@ -445,11 +445,11 @@ class CongressChatbotService
         } else {
             // Get recent bills if no specific bill mentioned
             $recentBills = Bill::orderBy('introduced_date', 'desc')
-                              ->limit(5)
+                              ->limit(25) // Increased from 5 to 25 for better coverage
                               ->get()
                               ->toArray();
             $data['bills'] = $recentBills;
-            $data['sources'][] = "Recent 5 bills from database";
+            $data['sources'][] = "Recent 25 bills from database";
         }
         
         return $data;
@@ -501,7 +501,7 @@ class CongressChatbotService
                         ->where('bill_sponsors.bioguide_id', $member->bioguide_id)
                         ->select('bills.*')
                         ->orderBy('bills.introduced_date', 'desc')
-                        ->limit(10)
+                        ->limit(50) // Increased from 10 to 50 for better coverage
                         ->get()
                         ->toArray();
                         
@@ -515,7 +515,7 @@ class CongressChatbotService
                         ->where('bill_cosponsors.bioguide_id', $member->bioguide_id)
                         ->select('bills.*')
                         ->orderBy('bills.introduced_date', 'desc')
-                        ->limit(5)
+                        ->limit(25) // Increased from 5 to 25 for better coverage
                         ->get()
                         ->toArray();
                         
@@ -739,10 +739,10 @@ class CongressChatbotService
                     )
                     ->join('bill_sponsors', 'members.bioguide_id', '=', 'bill_sponsors.bioguide_id')
                     ->join('bills', 'bill_sponsors.bill_id', '=', 'bills.id')
-                    ->where('bills.introduced_date', '>=', now()->subMonths(12)) // Extended to 12 months for better coverage
+                    ->where('bills.introduced_date', '>=', now()->subMonths(24)) // Extended to 24 months for better coverage
                     ->groupBy('members.bioguide_id', 'members.full_name', 'members.party_abbreviation', 'members.state')
                     ->orderBy('bills_sponsored', 'desc')
-                    ->limit(20) // Increased limit to show more sponsors
+                    ->limit(100) // Increased limit to show more sponsors
                     ->get()
                     ->toArray();
             } catch (\Exception $e) {
@@ -764,7 +764,7 @@ class CongressChatbotService
                         ->join('bills', 'bill_sponsors.bill_id', '=', 'bills.id')
                         ->groupBy('members.bioguide_id', 'members.full_name', 'members.party_abbreviation', 'members.state')
                         ->orderBy('bills_sponsored', 'desc')
-                        ->limit(20)
+                        ->limit(100) // Increased limit for comprehensive coverage
                         ->get()
                         ->toArray();
                 } catch (\Exception $fallbackError) {
@@ -1545,7 +1545,7 @@ Please provide a helpful, well-formatted response combining both Claude semantic
             'type' => 'general',
             'entities' => [],
             'time_filter' => null,
-            'limit' => 20,
+            'limit' => 200, // Increased from 20 to 200 for comprehensive search
             'priority' => 'recent'
         ];
         

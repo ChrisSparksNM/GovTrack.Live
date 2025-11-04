@@ -242,12 +242,13 @@ USER QUESTION: {$question}
 INSTRUCTIONS:
 1. Generate 1-3 SQL queries that will provide comprehensive data to answer the question
 2. Use proper JOINs when needed to get related data
-3. Include appropriate WHERE clauses, GROUP BY, ORDER BY, and LIMIT clauses
-4. For questions about 'most' or 'top', use ORDER BY with LIMIT
-5. For state-based questions, JOIN bills with bill_sponsors/bill_cosponsors and filter by state
-6. For party analysis, use party_abbreviation field
-7. For bill content searches, use LIKE with wildcards on title, bill_text, or ai_summary
-8. Return queries as a JSON array with descriptive names
+3. Include appropriate WHERE clauses, GROUP BY, and ORDER BY clauses
+4. ONLY use LIMIT when the user specifically asks for 'top', 'most', 'best', or a specific number
+5. For member-specific questions, get ALL their bills, not just a limited subset
+6. For state-based questions, JOIN bills with bill_sponsors/bill_cosponsors and filter by state
+7. For party analysis, use party_abbreviation field
+8. For bill content searches, use LIKE with wildcards on title, bill_text, or ai_summary
+9. Return queries as a JSON array with descriptive names
 
 IMPORTANT RULES FOR STATE QUERIES:
 - To find bills from a specific state, JOIN bills with bill_sponsors table and filter by state
@@ -266,7 +267,8 @@ CRITICAL COLUMN NAME RULES:
 IMPORTANT TECHNICAL RULES:
 - Always use proper SQL syntax for SQLite
 - Use strftime() for date formatting in SQLite, not DATE_FORMAT()
-- Use LIMIT for top/most questions
+- ONLY use LIMIT when user explicitly asks for 'top X', 'most X', 'best X' or specifies a number
+- For member activity questions, return ALL their bills to show complete legislative record
 - Include member names and details when relevant
 - Group by appropriate fields for aggregation
 - Use LEFT JOIN when you want to include records even if related data doesn't exist
@@ -285,11 +287,20 @@ FROM bills
 INNER JOIN bill_sponsors ON bills.id = bill_sponsors.bill_id
 INNER JOIN members ON bill_sponsors.bioguide_id = members.bioguide_id
 
--- Get bills from a specific state:
-SELECT bills.congress_id, bills.title, bill_sponsors.full_name, bill_sponsors.party, bill_sponsors.state
+-- Get ALL bills from a specific member (NO LIMIT unless user asks for top X):
+SELECT bills.congress_id, bills.title, bills.introduced_date, bill_sponsors.full_name
 FROM bills 
 INNER JOIN bill_sponsors ON bills.id = bill_sponsors.bill_id
-WHERE bill_sponsors.state = 'NJ'
+WHERE bill_sponsors.full_name LIKE '%Jefferson Van Drew%'
+ORDER BY bills.introduced_date DESC
+
+-- ONLY use LIMIT when user asks for 'top 10' or similar:
+SELECT bills.congress_id, bills.title, COUNT(*) as cosponsor_count
+FROM bills 
+INNER JOIN bill_cosponsors ON bills.id = bill_cosponsors.bill_id
+GROUP BY bills.id
+ORDER BY cosponsor_count DESC
+LIMIT 10  -- Only because user asked for 'top 10'
 
 RESPONSE FORMAT:
 Return ONLY a valid JSON object with this exact structure (no additional text):
