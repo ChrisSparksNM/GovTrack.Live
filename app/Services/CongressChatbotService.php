@@ -84,6 +84,8 @@ class CongressChatbotService
         }
     }
 
+
+
     /**
      * Enhanced question processing with Claude semantic analysis
      */
@@ -926,6 +928,10 @@ class CongressChatbotService
         return array_unique($keywords);
     }
 
+
+
+
+
     /**
      * Generate enhanced data sources with metadata
      */
@@ -1485,9 +1491,54 @@ Please provide a helpful, well-formatted response combining both Claude semantic
     }
 
     /**
-     * Memory-optimized database approach with full access
+     * Memory-optimized database approach with full access using DatabaseQueryService
      */
     private function askQuestionWithOptimizedDatabase(string $question, array $context = []): array
+    {
+        try {
+            // Use the DatabaseQueryService for comprehensive SQL-based analysis
+            $databaseService = $this->getDatabaseQueryService();
+            $databaseResult = $databaseService->queryDatabase($question);
+            
+            if ($databaseResult['success']) {
+                return [
+                    'success' => true,
+                    'response' => $databaseResult['analysis'],
+                    'response_html' => $databaseResult['analysis_html'] ?? '',
+                    'method' => 'optimized_database_full_access',
+                    'data_sources' => $databaseResult['data_sources'] ?? [],
+                    'queries_executed' => count($databaseResult['queries'] ?? []),
+                    'total_records' => array_sum(array_map(function($result) {
+                        return isset($result['error']) ? 0 : ($result['count'] ?? 0);
+                    }, $databaseResult['results'] ?? [])),
+                    'partial_data' => $databaseResult['partial_data'] ?? false,
+                    'context' => array_slice($context, -3) // Keep limited context
+                ];
+            }
+            
+            // Fallback to original method if DatabaseQueryService fails
+            Log::warning('DatabaseQueryService failed, using fallback method');
+            return $this->askQuestionWithOptimizedDatabaseFallback($question, $context);
+            
+        } catch (\Exception $e) {
+            Log::error('Optimized database query failed', [
+                'error' => $e->getMessage(),
+                'question' => substr($question, 0, 100)
+            ]);
+            
+            // Try fallback method
+            try {
+                return $this->askQuestionWithOptimizedDatabaseFallback($question, $context);
+            } catch (\Exception $fallbackError) {
+                return ['success' => false, 'error' => $e->getMessage()];
+            }
+        }
+    }
+
+    /**
+     * Fallback method for optimized database approach
+     */
+    private function askQuestionWithOptimizedDatabaseFallback(string $question, array $context = []): array
     {
         try {
             // Analyze question to determine optimal data retrieval strategy
@@ -1516,7 +1567,7 @@ Please provide a helpful, well-formatted response combining both Claude semantic
                     'success' => true,
                     'response' => $response['response'] ?? $response['content'],
                     'response_html' => $this->convertToHtml($response['response'] ?? $response['content']),
-                    'method' => 'optimized_database_full_access',
+                    'method' => 'optimized_database_fallback',
                     'data_sources' => $relevantData['sources'] ?? ['Congressional database with memory optimization'],
                     'query_plan' => $queryPlan,
                     'data_summary' => $relevantData['summary'] ?? [],
@@ -1527,7 +1578,7 @@ Please provide a helpful, well-formatted response combining both Claude semantic
             return ['success' => false, 'error' => 'AI response failed'];
             
         } catch (\Exception $e) {
-            Log::error('Optimized database query failed', [
+            Log::error('Optimized database fallback failed', [
                 'error' => $e->getMessage(),
                 'question' => substr($question, 0, 100)
             ]);

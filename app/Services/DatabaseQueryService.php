@@ -239,6 +239,8 @@ USER QUESTION: {$question}
 
 " . ($stateInfo ? "STATE CONTEXT: The user is asking about {$stateInfo['state_name']} (state code: {$stateInfo['state_code']}). Make sure to filter by state = '{$stateInfo['state_code']}' in your queries.\n\n" : "") . "
 
+MEMBER NAME CONTEXT: " . $this->extractMemberNameGuidance($question) . "
+
 INSTRUCTIONS:
 1. Generate 1-3 SQL queries that will provide comprehensive data to answer the question
 2. Use proper JOINs when needed to get related data
@@ -263,6 +265,13 @@ CRITICAL COLUMN NAME RULES:
 - For sponsor data, JOIN bills with bill_sponsors table using bill_id
 - For cosponsor data, JOIN bills with bill_cosponsors table using bill_id
 - bill_sponsors and bill_cosponsors tables have bioguide_id to link to members table
+
+CRITICAL NAME SEARCHING RULES:
+- Member names in bill_sponsors/bill_cosponsors are formatted as 'Rep. LastName, FirstName [Party-State-District]'
+- ALWAYS use LIKE with wildcards when searching for member names: WHERE full_name LIKE '%LastName%'
+- For 'Jefferson Van Drew', search with: WHERE full_name LIKE '%Van Drew%'
+- For 'John Smith', search with: WHERE full_name LIKE '%Smith%'
+- Use the last name portion for reliable matching across different name formats
 
 IMPORTANT TECHNICAL RULES:
 - Always use proper SQL syntax for SQLite
@@ -291,7 +300,7 @@ INNER JOIN members ON bill_sponsors.bioguide_id = members.bioguide_id
 SELECT bills.congress_id, bills.title, bills.introduced_date, bill_sponsors.full_name
 FROM bills 
 INNER JOIN bill_sponsors ON bills.id = bill_sponsors.bill_id
-WHERE bill_sponsors.full_name LIKE '%Jefferson Van Drew%'
+WHERE bill_sponsors.full_name LIKE '%Van Drew%'
 ORDER BY bills.introduced_date DESC
 
 -- ONLY use LIMIT when user asks for 'top 10' or similar:
@@ -508,6 +517,41 @@ Write a friendly, informative response:";
             'analysis' => $response['response'] ?? 'Analysis not available',
             'analysis_html' => $response['response_html'] ?? ''
         ];
+    }
+
+    /**
+     * Extract member name guidance for SQL generation
+     */
+    private function extractMemberNameGuidance(string $question): string
+    {
+        // Look for member names in the question
+        $memberNames = [];
+        
+        // Pattern for "FirstName LastName" or "FirstName MiddleName LastName"
+        if (preg_match_all('/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+[A-Z][a-z]+)\b/', $question, $matches)) {
+            foreach ($matches[1] as $name) {
+                // Skip common non-name phrases
+                if (!preg_match('/\b(United States|New York|New Jersey|South Carolina|North Dakota|West Virginia|Rhode Island|New Hampshire|New Mexico)\b/i', $name)) {
+                    $memberNames[] = $name;
+                }
+            }
+        }
+        
+        if (empty($memberNames)) {
+            return "No specific member names detected in the question.";
+        }
+        
+        $guidance = "Member names detected: " . implode(', ', $memberNames) . ". ";
+        $guidance .= "For each member name, extract the LAST NAME and use LIKE '%LastName%' for searching. ";
+        $guidance .= "Examples: ";
+        
+        foreach ($memberNames as $name) {
+            $parts = explode(' ', trim($name));
+            $lastName = end($parts);
+            $guidance .= "For '$name' use LIKE '%$lastName%'; ";
+        }
+        
+        return $guidance;
     }
 
     /**
